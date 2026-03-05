@@ -516,10 +516,13 @@ export default function App() {
       // Aging: earliest open lot timestamp
       const oldestTs = Math.min(...openLots.map(l => new Date(l.timestamp).getTime()))
       const ageDays = (Date.now() - oldestTs) / 86400000
-      // Has any active listing?
+      // Skip items that have active listings (they are at Bazar, not in Magazzino)
       const activeListings = (it.listings || []).filter(l => !l.sold)
-      const listedQty = activeListings.reduce((a, l) => a + l.qty, 0)
-      rows.push({ name, openLots, totalQty, totalCost, avgBuy, lastPrice, estValue, estProfit, ageDays, listedQty })
+      if (activeListings.length > 0) continue
+      // Average price (all real prices)
+      const realPrices = ps.filter(p => !p.esaurito).map(p => p.price)
+      const avgPrice = realPrices.length ? Math.round(realPrices.reduce((a, b) => a + b, 0) / realPrices.length) : null
+      rows.push({ name, openLots, totalQty, totalCost, avgBuy, lastPrice, estValue, estProfit, ageDays, avgPrice })
     }
     const totalQty = rows.reduce((a, r) => a + r.totalQty, 0)
     const totalSpent = rows.reduce((a, r) => a + r.totalCost, 0)
@@ -1502,7 +1505,7 @@ export default function App() {
                     <div style={{ width:100, flexShrink:0, textAlign:"right" }}>INVESTITO</div>
                     <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO ATT.</div>
                     <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PROFITTO ST.</div>
-                    <div style={{ width:70, flexShrink:0, textAlign:"right" }}>IN VEND.</div>
+                    <div style={{ width:80, flexShrink:0, textAlign:"right" }}>MEDIA</div>
                     <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ETÀ STOCK</div>
                   </div>
                   {[...magazzinoOverview.rows].sort((a,b) => b.ageDays - a.ageDays).map((r, ri) => {
@@ -1520,8 +1523,8 @@ export default function App() {
                         <div style={{ width:100, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.estProfit!=null?(r.estProfit>=0?C.green:C.red):C.muted }}>
                           {r.estProfit != null ? `${r.estProfit>=0?"▲":"▼"} ${fmtG(Math.abs(r.estProfit))}` : "—"}
                         </div>
-                        <div style={{ width:70, flexShrink:0, fontSize:12, textAlign:"right", color:r.listedQty > 0 ? C.gold : C.muted }}>
-                          {r.listedQty > 0 ? `${r.listedQty} pz` : "no"}
+                        <div style={{ width:80, flexShrink:0, fontSize:13, fontFamily:"monospace", textAlign:"right", color:C.text }}>
+                          {r.avgPrice != null ? fmtG(r.avgPrice) : "—"}
                         </div>
                         <div style={{ width:80, flexShrink:0, fontSize:13, fontWeight:700, textAlign:"right", color:ageColor }}>
                           {ageLabel}
