@@ -981,26 +981,6 @@ export default function App() {
           📊 Analisi
         </button>
 
-        {updateStatus === "downloaded" && (
-          <button onClick={() => window.api.flushAndInstallUpdate(data)} style={{ background:"rgba(76,175,80,.15)", border:"1px solid #4caf50", borderRadius:7, color:"#4caf50", cursor:"pointer", padding:"4px 12px", fontSize:11, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", animation:"pulse 2s infinite" }}>
-            🔄 Aggiorna ora
-          </button>
-        )}
-        {updateStatus === "downloading" && (
-          <div style={{ display:"flex", alignItems:"center", gap:8, WebkitAppRegion:"no-drag" }}>
-            <div style={{ width:120, height:6, background:"#1c1f2e", borderRadius:3, overflow:"hidden" }}>
-              <div style={{ width:`${downloadPct}%`, height:"100%", background:"#ffa726", borderRadius:3, transition:"width .3s" }}/>
-            </div>
-            <span style={{ color:"#ffa726", fontSize:11 }}>⬇️ {downloadPct}%</span>
-          </div>
-        )}
-        {updateStatus === "available" && (
-          <span style={{ color:"#ffa726", fontSize:11, letterSpacing:1 }}>⬇️ Preparazione aggiornamento...</span>
-        )}
-        {updateStatus === "error" && (
-          <span title={updateError} style={{ color:"#f44336", fontSize:11, letterSpacing:1, cursor:"help" }}>⚠️ Aggiornamento fallito</span>
-        )}
-
         <div style={{ flex:1 }}/>
 
         <button onClick={openQuick} title="Quick-add prezzi (Ctrl+Q)"
@@ -2498,6 +2478,49 @@ export default function App() {
                 </div>
               </div>
             )}
+
+          </div>
+        </div>
+      )}
+      {/* ══ UPDATE POPUP ══ */}
+      {(updateStatus === "available" || updateStatus === "downloading" || updateStatus === "downloaded" || updateStatus === "error") && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9998 }}>
+          <div className="up" style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, padding:28, width:400, maxWidth:"90vw", boxShadow:"0 20px 60px rgba(0,0,0,.6)", textAlign:"center" }}>
+
+            {updateStatus === "available" && (<>
+              <div style={{ fontSize:40, marginBottom:12 }}>⬇️</div>
+              <div style={{ fontSize:16, color:C.text, fontWeight:700, marginBottom:8 }}>Aggiornamento disponibile</div>
+              <div style={{ fontSize:13, color:C.muted }}>Download in preparazione...</div>
+            </>)}
+
+            {updateStatus === "downloading" && (<>
+              <div style={{ fontSize:40, marginBottom:12 }}>📥</div>
+              <div style={{ fontSize:16, color:C.text, fontWeight:700, marginBottom:12 }}>Download in corso...</div>
+              <div style={{ width:"100%", height:8, background:"#0f1119", borderRadius:4, overflow:"hidden", marginBottom:8 }}>
+                <div style={{ width:`${downloadPct}%`, height:"100%", background:"#ffa726", borderRadius:4, transition:"width .3s" }}/>
+              </div>
+              <div style={{ fontSize:14, color:"#ffa726", fontWeight:700, fontFamily:"monospace" }}>{downloadPct}%</div>
+            </>)}
+
+            {updateStatus === "downloaded" && (<>
+              <div style={{ fontSize:40, marginBottom:12 }}>✅</div>
+              <div style={{ fontSize:16, color:C.text, fontWeight:700, marginBottom:8 }}>Aggiornamento pronto!</div>
+              <div style={{ fontSize:13, color:C.muted, marginBottom:18 }}>L'app verrà chiusa e riavviata con la nuova versione.</div>
+              <button onClick={() => window.api.flushAndInstallUpdate(data)}
+                style={{ ...pill(true, C.green), padding:"12px 28px", fontSize:15, letterSpacing:2 }}>
+                🔄 AGGIORNA E RIAVVIA
+              </button>
+            </>)}
+
+            {updateStatus === "error" && (<>
+              <div style={{ fontSize:40, marginBottom:12 }}>⚠️</div>
+              <div style={{ fontSize:16, color:C.red, fontWeight:700, marginBottom:8 }}>Aggiornamento fallito</div>
+              <div style={{ fontSize:12, color:C.muted, marginBottom:14, wordBreak:"break-word" }}>{updateError}</div>
+              <button onClick={() => setUpdateStatus(null)}
+                style={{ ...pill(false, C.muted), padding:"8px 20px", fontSize:13 }}>
+                CHIUDI
+              </button>
+            </>)}
 
           </div>
         </div>
