@@ -1724,41 +1724,67 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Staging Time per Item */}
-                {performanceAnalytics.byItem.some(r => r.avgStaging != null) && (
-                  <div style={{ marginTop:20 }}>
-                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO DI STAGING — ACQUISTO → BAZAR (giorni)</div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                      <div style={{ display:"flex", padding:"4px 12px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
-                        <div style={{ width:150, flexShrink:0 }}>ITEM</div>
-                        <div style={{ width:70, textAlign:"right" }}>MEDIA</div>
-                        <div style={{ width:70, textAlign:"right" }}>MIN</div>
-                        <div style={{ width:70, textAlign:"right" }}>MAX</div>
-                        <div style={{ width:80, textAlign:"right" }}>CICLO TOT.</div>
-                        <div style={{ flex:1 }}/>
-                        <div style={{ width:120 }}>BARRA</div>
-                      </div>
-                      {performanceAnalytics.byItem.filter(r => r.avgStaging != null).sort((a,b) => b.avgStaging - a.avgStaging).map(r => {
-                        const maxBar = Math.max(...performanceAnalytics.byItem.filter(x => x.avgStaging != null).map(x => x.avgStaging))
-                        const pct = maxBar > 0 ? (r.avgStaging / maxBar) * 100 : 0
-                        const barColor = r.avgStaging >= 7 ? C.red : r.avgStaging >= 3 ? C.gold : C.green
-                        return (
-                          <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:10, background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
-                            <div style={{ width:150, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
-                            <div style={{ width:70, textAlign:"right", fontSize:13, fontFamily:"monospace", fontWeight:700, color:barColor }}>{r.avgStaging.toFixed(1)}g</div>
-                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.green }}>{r.minStaging.toFixed(1)}g</div>
-                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.red }}>{r.maxStaging.toFixed(1)}g</div>
-                            <div style={{ width:80, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.muted }}>{r.avgCycle != null ? r.avgCycle.toFixed(1) + "g" : "—"}</div>
-                            <div style={{ flex:1 }}/>
-                            <div style={{ width:120, height:10, background:"#0f1119", borderRadius:5, overflow:"hidden" }}>
-                              <div style={{ width:`${pct}%`, height:"100%", background:barColor, borderRadius:5, transition:"width .3s" }}/>
-                            </div>
+                {/* Staging Time per Item — oldest open lot age */}
+                {(() => {
+                  // Group open lots by item, get oldest lot age per item
+                  const stagingMap = {}
+                  for (const r of magazzinoOverview.rows) {
+                    if (!stagingMap[r.name] || r.ageDays > stagingMap[r.name].ageDays) {
+                      stagingMap[r.name] = { name: r.name, ageDays: r.ageDays, ageMs: Date.now() - new Date(r.lot.timestamp).getTime() }
+                    }
+                  }
+                  const stagingRows = Object.values(stagingMap).sort((a, b) => b.ageDays - a.ageDays)
+                  if (!stagingRows.length) return null
+                  const fmtAge = ms => {
+                    const d = Math.floor(ms / 86400000)
+                    const h = Math.floor((ms % 86400000) / 3600000)
+                    const m = Math.floor((ms % 3600000) / 60000)
+                    if (d > 0) return `${d}g ${h}h ${m}m`
+                    if (h > 0) return `${h}h ${m}m`
+                    return `${m}m`
+                  }
+                  const avgDays = stagingRows.reduce((a, r) => a + r.ageDays, 0) / stagingRows.length
+                  const chartData = stagingRows.map(r => ({ name: r.name, giorni: Math.round(r.ageDays * 10) / 10 }))
+                  return (
+                    <div style={{ marginTop:20 }}>
+                      <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO IN MAGAZZINO — DA QUANTO TEMPO STAI TENENDO STOCK</div>
+                      <div style={{ display:"flex", gap:16 }}>
+                        {/* Table left */}
+                        <div style={{ flex:"0 0 280px", display:"flex", flexDirection:"column", gap:3 }}>
+                          <div style={{ display:"flex", padding:"4px 10px", fontSize:11, color:C.muted, letterSpacing:1 }}>
+                            <div style={{ flex:1 }}>ITEM</div>
+                            <div style={{ width:120, textAlign:"right" }}>TEMPO</div>
                           </div>
-                        )
-                      })}
+                          {stagingRows.map(r => {
+                            const col = r.ageDays >= 7 ? C.red : r.ageDays >= 3 ? C.gold : C.green
+                            return (
+                              <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"7px 10px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
+                                <div style={{ flex:1, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                                <div style={{ width:120, textAlign:"right", fontSize:13, fontFamily:"monospace", fontWeight:700, color:col }}>{fmtAge(r.ageMs)}</div>
+                              </div>
+                            )
+                          })}
+                          <div style={{ fontSize:11, color:C.muted, marginTop:4, textAlign:"right", paddingRight:10 }}>
+                            Media: <b style={{ color:C.gold }}>{fmtAge(avgDays * 86400000)}</b>
+                          </div>
+                        </div>
+                        {/* Chart right */}
+                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:200 }}>
+                          <ResponsiveContainer width="100%" height={Math.max(220, stagingRows.length * 35)}>
+                            <BarChart data={chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
+                              <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
+                              <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
+                              <YAxis stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
+                              <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v) => [v + "g", "Staging"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
+                              <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Staging"/>
+                              <ReferenceLine y={Math.round(avgDays * 10) / 10} stroke={C.red} strokeWidth={2} strokeDasharray="6 3" label={{ value:`Media: ${(Math.round(avgDays * 10) / 10)}g`, fill:C.red, fontSize:11, position:"insideTopRight" }}/>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Rankings Row */}
                 <div style={{ display:"flex", gap:14, marginTop:20, flexWrap:"wrap" }}>
