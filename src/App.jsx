@@ -179,7 +179,8 @@ export default function App() {
   const [saveStatus, setSaveStatus]= useState("idle")
   const [dataPath,   setDataPath]  = useState("")
   const [appVersion, setAppVersion]= useState("4.0.0")
-  const [updateStatus, setUpdateStatus] = useState(null) // null | "available" | "downloaded"
+  const [updateStatus, setUpdateStatus] = useState(null) // null | "available" | "downloading" | "downloaded"
+  const [downloadPct, setDownloadPct] = useState(0)
 
   // navigation
   const [page,    setPage]    = useState("dashboard")   // dashboard | item | new
@@ -268,6 +269,7 @@ export default function App() {
     // version + auto-update listeners
     window.api.getVersion?.().then(v => v && setAppVersion(v))
     window.api.onUpdateAvailable?.(() => setUpdateStatus("available"))
+    window.api.onDownloadProgress?.((info) => { setUpdateStatus("downloading"); setDownloadPct(Math.round(info.percent || 0)) })
     window.api.onUpdateDownloaded?.(() => setUpdateStatus("downloaded"))
   }, [])
 
@@ -728,8 +730,16 @@ export default function App() {
             🔄 Aggiorna ora
           </button>
         )}
+        {updateStatus === "downloading" && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, WebkitAppRegion:"no-drag" }}>
+            <div style={{ width:120, height:6, background:"#1c1f2e", borderRadius:3, overflow:"hidden" }}>
+              <div style={{ width:`${downloadPct}%`, height:"100%", background:"#ffa726", borderRadius:3, transition:"width .3s" }}/>
+            </div>
+            <span style={{ color:"#ffa726", fontSize:11 }}>⬇️ {downloadPct}%</span>
+          </div>
+        )}
         {updateStatus === "available" && (
-          <span style={{ color:"#ffa726", fontSize:11, letterSpacing:1 }}>⬇️ Download aggiornamento...</span>
+          <span style={{ color:"#ffa726", fontSize:11, letterSpacing:1 }}>⬇️ Preparazione aggiornamento...</span>
         )}
 
         <div style={{ flex:1 }}/>

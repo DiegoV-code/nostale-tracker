@@ -62,7 +62,7 @@ ipcMain.on('win-maximize', () => win?.isMaximized() ? win.unmaximize() : win?.ma
 ipcMain.on('win-close',    () => win?.close())
 
 ipcMain.handle('get-version', () => app.getVersion())
-ipcMain.on('install-update', () => autoUpdater.quitAndInstall())
+ipcMain.on('install-update', () => autoUpdater.quitAndInstall(true, true))
 
 let win
 function createWindow() {
