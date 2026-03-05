@@ -57,22 +57,25 @@ const fmtFull = iso => { const d = new Date(iso); return `${fmtDate(d)} ${fmtTim
 const todayStr = () => fmtDate(new Date())
 
 /* ═══════════════════════════════════════════════════════
-   BAZAR — commissione NosTale con Medaglia Nos Mercante
-   1.5% del prezzo · min 50 ori · max 20.000 ori
+   LOT MATCHING — FIFO match dei lotti magazzino
+   Usato quando si crea un listing per calcolare il costo
+   reale dai lotti di acquisto
 ═══════════════════════════════════════════════════════ */
-function calcBazarFee(price) {
-  if (!price || price <= 0) return 0
-  return Math.max(50, Math.min(20000, Math.round(price * 0.015)))
-}
-
-function calcBreakeven(buyPrice) {
-  if (!buyPrice || buyPrice <= 0) return null
-  // caso normale: price * 0.985 = buyPrice → price = buyPrice / 0.985
-  const be = Math.ceil(buyPrice / 0.985)
-  const fee = calcBazarFee(be)
-  if (fee === 50)    return buyPrice + 50     // fee al minimo
-  if (fee === 20000) return buyPrice + 20000  // fee al cap
-  return be
+function matchLotsForQty(lots, qty) {
+  const links = []
+  let remaining = qty
+  for (let i = 0; i < lots.length; i++) {
+    if (remaining <= 0) break
+    const l = lots[i]
+    if (l.sold || l.qty <= 0) continue
+    const take = Math.min(l.qty, remaining)
+    links.push({ lotId: l.id, lotIdx: i, qty: take, unitPrice: l.price })
+    remaining -= take
+  }
+  const coveredQty = qty - remaining
+  const totalCost = links.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0)
+  const avgBuyPrice = coveredQty > 0 ? Math.round(totalCost / coveredQty) : null
+  return { links, coveredQty, uncoveredQty: remaining, totalCost, avgBuyPrice }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -202,7 +205,6 @@ export default function App() {
   // listing form (in vendita)
   const [lsQty,      setLsQty]      = useState("")
   const [lsPrice,    setLsPrice]    = useState("")
-  const [lsBuyPrice, setLsBuyPrice] = useState("")
   const [lsNote,     setLsNote]     = useState("")
 
   // new item form
@@ -261,6 +263,12 @@ export default function App() {
         const [loaded, dp] = await Promise.all([window.api.load(), window.api.dataPath()])
         setDataPath(dp)
         const d = loaded || INIT
+        // Migrate: add IDs to lots that don't have them
+        for (const it of Object.values(d.items || {})) {
+          for (const lot of (it.lots || [])) {
+            if (!lot.id) lot.id = lot.timestamp + '_' + Math.random().toString(36).slice(2,6)
+          }
+        }
         setData(d)
         const names = Object.keys(d.items || {})
         if (names.length) { setSelItem(names[0]); setPage("item") }
@@ -419,10 +427,20 @@ export default function App() {
     const activeValue = active.reduce((a,l) => a + l.qty * l.listPrice, 0)
     const sellTimesMs = sold.map(l => new Date(l.soldAt) - new Date(l.listedAt))
     const avgMs       = sellTimesMs.length ? sellTimesMs.reduce((a,b)=>a+b,0)/sellTimesMs.length : null
-    const totalProfit = sold.reduce((a,l) => a + (l.listPrice - (l.buyPrice ?? 0)) * l.qty, 0)
+    const totalProfit = sold.reduce((a,l) => {
+      if (l.buyPrice == null) return a
+      const qty = l.coveredQty || l.qty
+      return a + (l.listPrice - l.buyPrice) * qty
+    }, 0)
     const profitableSales = sold.filter(l => l.buyPrice != null)
     return { active, sold, activeQty, activeValue, avgMs, totalProfit, profitableSales }
   }, [listings])
+
+  /* ── LOT PREVIEW for listing form ── */
+  const lotPreview = useMemo(() => {
+    if (!lsQty || isNaN(parseInt(lsQty)) || parseInt(lsQty) <= 0) return null
+    return matchLotsForQty(lots, parseInt(lsQty))
+  }, [lots, lsQty])
 
   /* ── CAPITAL OVERVIEW ── */
   const capitalOverview = useMemo(() => {
@@ -434,7 +452,7 @@ export default function App() {
       const soldWithBuy  = (it.listings || []).filter(l => l.sold && l.buyPrice != null)
       inStock   += openLots.reduce((a,l) => a + l.qty * l.price, 0)
       atMarket  += activeList.reduce((a,l) => a + l.qty * l.listPrice, 0)
-      realized  += soldWithBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * l.qty, 0)
+      realized  += soldWithBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty), 0)
       totalItems++
     }
     return { inStock, atMarket, realized, totalItems }
@@ -464,7 +482,7 @@ export default function App() {
       const roiPct     = soldBuy.length
         ? soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) / l.buyPrice, 0) / soldBuy.length * 100
         : null
-      const totalProfit = soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * l.qty, 0)
+      const totalProfit = soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty), 0)
 
       const soldL      = lsList.filter(l => l.sold)
       const avgSellMs  = soldL.length
@@ -541,7 +559,7 @@ export default function App() {
     const qty   = parseInt(lQty)
     const price = parseG(lPrice)
     if (!selItem || isNaN(qty) || qty <= 0 || qty > 999 || isNaN(price) || price <= 0) return
-    const lot = { qty, price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: lNote.trim(), sold: false }
+    const lot = { id: Date.now() + '_' + Math.random().toString(36).slice(2,6), qty, price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: lNote.trim(), sold: false }
     const it  = { ...data.items[selItem], lots: [...lots, lot] }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
     setLQty(""); setLPrice(""); setLNote("")
@@ -589,23 +607,34 @@ export default function App() {
   const addListing = () => {
     const qty   = parseInt(lsQty)
     const listP = parseG(lsPrice)
-    const buyP  = lsBuyPrice.trim() ? parseG(lsBuyPrice) : null
     if (!selItem || isNaN(qty) || qty <= 0 || isNaN(listP) || listP <= 0) return
-    const entry = { qty, listPrice: Math.round(listP), buyPrice: buyP != null ? Math.round(buyP) : null, listedAt: new Date().toISOString(), note: lsNote.trim(), sold: false, soldAt: null }
+    const match = matchLotsForQty(lots, qty)
+    const entry = { qty, listPrice: Math.round(listP), buyPrice: match.avgBuyPrice, coveredQty: match.coveredQty, totalCost: match.totalCost, lotLinks: match.links, listedAt: new Date().toISOString(), note: lsNote.trim(), sold: false, soldAt: null }
     const it = { ...data.items[selItem], listings: [...listings, entry] }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
-    setLsQty(""); setLsPrice(""); setLsBuyPrice(""); setLsNote("")
+    setLsQty(""); setLsPrice(""); setLsNote("")
   }
 
   const markListingSold = idx => {
-    const updated = listings.map((l,i) => i === idx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
-    const it = { ...data.items[selItem], listings: updated }
-    upd({ ...data, items: { ...data.items, [selItem]: it } })
-  }
-
-  const reopenListing = idx => {
-    const updated = listings.map((l,i) => i === idx ? { ...l, sold: false, soldAt: null } : l)
-    const it = { ...data.items[selItem], listings: updated }
+    const listing = listings[idx]
+    const updatedLots = lots.map(l => ({ ...l }))
+    // Auto-consume linked lots from magazzino (FIFO)
+    if (listing.lotLinks) {
+      for (const link of listing.lotLinks) {
+        const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
+        if (lotIdx !== -1) {
+          if (link.qty >= updatedLots[lotIdx].qty) {
+            // Fully consumed — mark sold, keep original qty for history
+            updatedLots[lotIdx].sold = true
+          } else {
+            // Partially consumed — reduce qty
+            updatedLots[lotIdx].qty -= link.qty
+          }
+        }
+      }
+    }
+    const updatedListings = listings.map((l,i) => i === idx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
+    const it = { ...data.items[selItem], lots: updatedLots, listings: updatedListings }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
   }
 
@@ -1430,7 +1459,6 @@ export default function App() {
                         { l:"QTÀ IN STOCK",       v:lotStats.totalQty + " pz",         c:C.blue  },
                         { l:"TOTALE SPESO",        v:fmtG(lotStats.totalSpent),          c:C.red   },
                         { l:"PREZZO MEDIO ACQ.",   v:fmtG(lotStats.avgBuy),             c:C.text  },
-                        { l:"VENDI ALMENO A",       v:fmtG(calcBreakeven(lotStats.avgBuy)), c:C.gold, sub:`comm. ${fmtG(calcBazarFee(calcBreakeven(lotStats.avgBuy)))} inclusa`, title:"Prezzo minimo al bazar per non andare in perdita (include la commissione del 1.5%)" },
                         { l:"PREZZO ATTUALE",      v:fmtG(lotStats.currentPrice),        c:C.gold  },
                         { l:"VALORE STIMATO",      v:fmtG(lotStats.estimatedValue),      c:C.text  },
                         { l:"PROFITTO STIMATO",    v:fmtG(lotStats.estimatedProfit),     c:lotStats.estimatedProfit>=0?C.green:C.red },
@@ -1569,26 +1597,8 @@ export default function App() {
                       <div style={{ flex:"0 0 160px" }}>
                         <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>PREZZO BAZAR</div>
                         <input value={lsPrice} onChange={e=>setLsPrice(e.target.value)} placeholder="150k" style={inp({ color:C.gold })}/>
-                        {lsPrice && !isNaN(parseG(lsPrice)) && (() => {
-                          const p = parseG(lsPrice)
-                          const fee = calcBazarFee(p)
-                          return (
-                            <div style={{ fontSize:11, color:C.muted, marginTop:4, lineHeight:1.6 }}>
-                              {fmtG(p)}<br/>
-                              <span style={{ color:"#fb7185" }}>comm. {fmtG(fee)}</span>
-                              <span style={{ color:C.green, marginLeft:6 }}>netto {fmtG(p - fee)}</span>
-                            </div>
-                          )
-                        })()}
-                      </div>
-                      <div style={{ flex:"0 0 160px" }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:3 }}>PREZZO ACQUISTO</div>
-                        <div style={{ fontSize:11, color:"#6b7a96", marginBottom:5 }}>quanto l'hai pagato → calcola il profitto</div>
-                        <input value={lsBuyPrice} onChange={e=>setLsBuyPrice(e.target.value)} placeholder="es. 120k (opz.)" style={inp({ color:C.blue })}/>
-                        {lsBuyPrice && !isNaN(parseG(lsBuyPrice)) && lsPrice && !isNaN(parseG(lsPrice)) && lsQty && (
-                          <div style={{ fontSize:11, color:(parseG(lsPrice)-parseG(lsBuyPrice))>=0?C.green:C.red, marginTop:4, fontWeight:700 }}>
-                            {(parseG(lsPrice)-parseG(lsBuyPrice))>=0?"▲":"▼"} {fmtG(Math.abs(parseG(lsPrice)-parseG(lsBuyPrice))*parseInt(lsQty||0))} profitto
-                          </div>
+                        {lsPrice && !isNaN(parseG(lsPrice)) && (
+                          <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>{fmtG(parseG(lsPrice))}</div>
                         )}
                       </div>
                       <div style={{ flex:"1 1 140px" }}>
@@ -1600,6 +1610,42 @@ export default function App() {
                         🏷️ METTI IN VENDITA
                       </button>
                     </div>
+
+                    {/* Lot matching preview */}
+                    {lotPreview && lotPreview.links.length > 0 && (
+                      <div style={{ marginTop:12, background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px" }}>
+                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>LOTTI DAL MAGAZZINO (FIFO)</div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                          {lotPreview.links.map((lk, i) => (
+                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+                              <span style={{ color:C.blue, fontWeight:700, fontFamily:"monospace", minWidth:50 }}>x{lk.qty}</span>
+                              <span style={{ color:C.text, fontFamily:"monospace" }}>@ {fmtG(lk.unitPrice)}</span>
+                              <span style={{ color:C.muted, fontFamily:"monospace" }}>= {fmtG(lk.qty * lk.unitPrice)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ marginTop:8, display:"flex", gap:14, flexWrap:"wrap", fontSize:12 }}>
+                          <span style={{ color:C.muted }}>Coperti: <b style={{ color:C.blue }}>{lotPreview.coveredQty} pz</b></span>
+                          <span style={{ color:C.muted }}>Costo totale: <b style={{ color:C.text }}>{fmtG(lotPreview.totalCost)}</b></span>
+                          <span style={{ color:C.muted }}>Media acquisto: <b style={{ color:C.text }}>{fmtG(lotPreview.avgBuyPrice)}</b></span>
+                          {lotPreview.uncoveredQty > 0 && (
+                            <span style={{ color:C.red, fontWeight:700 }}>⚠ {lotPreview.uncoveredQty} pz non coperti da magazzino</span>
+                          )}
+                        </div>
+                        {lsPrice && !isNaN(parseG(lsPrice)) && lotPreview.avgBuyPrice && (() => {
+                          const sellP = parseG(lsPrice)
+                          const profit = (sellP - lotPreview.avgBuyPrice) * lotPreview.coveredQty
+                          return (
+                            <div style={{ marginTop:6, fontSize:13, fontWeight:700, fontFamily:"monospace", color:profit>=0?C.green:C.red }}>
+                              {profit>=0?"▲":"▼"} {fmtG(Math.abs(profit))} profitto stimato sulla slot
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+                    {lotPreview && lotPreview.links.length === 0 && parseInt(lsQty) > 0 && (
+                      <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Nessun lotto disponibile in magazzino per questo item</div>
+                    )}
                   </div>
 
                   {/* listing attivi */}
@@ -1612,7 +1658,8 @@ export default function App() {
                       {listings.map((l, i) => {
                         if (l.sold) return null
                         const daysActive = ((Date.now() - new Date(l.listedAt)) / 86400000)
-                        const profitPerUnit = l.buyPrice != null ? l.listPrice - l.buyPrice : null
+                        const covered = l.coveredQty || 0
+                        const profitOnCovered = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered : null
                         return (
                           <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, flexWrap:"wrap" }}>
                             <div style={{ display:"flex", flexDirection:"column", minWidth:118, flexShrink:0 }}>
@@ -1624,12 +1671,20 @@ export default function App() {
                             <span style={{ fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", minWidth:45, flexShrink:0 }}>×{l.qty}</span>
                             <span style={{ fontSize:16, color:C.gold, fontWeight:700, fontFamily:"monospace", minWidth:100, flexShrink:0 }}>@ {fmtG(l.listPrice)}</span>
                             <span style={{ fontSize:13, color:C.muted, fontFamily:"monospace", minWidth:90, flexShrink:0 }}>= {fmtG(l.listPrice*l.qty)}</span>
-                            {profitPerUnit != null && (
-                              <span style={{ fontSize:13, color:profitPerUnit>=0?C.green:C.red, fontFamily:"monospace", minWidth:100, flexShrink:0 }}>
-                                {profitPerUnit>=0?"▲":"▼"} {fmtG(profitPerUnit*l.qty)}
+                            {profitOnCovered != null && (
+                              <span style={{ fontSize:13, color:profitOnCovered>=0?C.green:C.red, fontFamily:"monospace", minWidth:100, flexShrink:0 }}>
+                                {profitOnCovered>=0?"▲":"▼"} {fmtG(profitOnCovered)}
                               </span>
                             )}
-                            {l.buyPrice && <span style={{ fontSize:11, color:C.muted }}>acq. {fmtG(l.buyPrice)}</span>}
+                            {l.buyPrice && <span style={{ fontSize:11, color:C.muted }}>media acq. {fmtG(l.buyPrice)}</span>}
+                            {l.lotLinks && l.lotLinks.length > 0 && (
+                              <span style={{ fontSize:11, color:"#6b7a96", flexShrink:0 }} title={l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}>
+                                [{l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}]
+                              </span>
+                            )}
+                            {covered < l.qty && covered > 0 && (
+                              <span style={{ fontSize:11, color:C.red }}>⚠ {l.qty - covered} non coperti</span>
+                            )}
                             <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
                             <button onClick={()=>markListingSold(i)}
                               style={{ ...pill(false, C.green, { padding:"5px 14px", fontSize:12 }), flexShrink:0 }}>✓ VENDUTO</button>
@@ -1647,12 +1702,12 @@ export default function App() {
                           if (!l.sold) return null
                           const timeToSell   = fmtSellTime(l.listedAt, l.soldAt)
                           const msToSell     = new Date(l.soldAt) - new Date(l.listedAt)
-                          const profitTotal  = l.buyPrice != null ? (l.listPrice - l.buyPrice) * l.qty : null
+                          const covered      = l.coveredQty || 0
+                          const profitTotal  = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered : null
                           return (
                             <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 14px", gap:10, flexWrap:"wrap" }}>
                               <span style={{ fontSize:11, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(l.listedAt)}</span>
                               <span style={{ fontSize:13, color:C.muted, fontFamily:"monospace", fontWeight:700, flexShrink:0 }}>×{l.qty} @ {fmtG(l.listPrice)}</span>
-                              {/* ROI: tempo vendita */}
                               <div style={{ display:"flex", flexDirection:"column", flexShrink:0 }}>
                                 <span style={{ fontSize:12, color:C.green }}>✓ venduto</span>
                                 <span style={{ fontSize:12, color:msToSell<86400000?C.green:msToSell<3*86400000?C.gold:C.red, fontWeight:700 }}>
@@ -1664,8 +1719,12 @@ export default function App() {
                                   {profitTotal>=0?"▲":"▼"} {fmtG(profitTotal)}
                                 </span>
                               )}
+                              {l.lotLinks && l.lotLinks.length > 0 && (
+                                <span style={{ fontSize:11, color:"#6b7a96", flexShrink:0 }}>
+                                  [{l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}]
+                                </span>
+                              )}
                               <span style={{ fontSize:11, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
-                              <button onClick={()=>reopenListing(i)} style={{ fontSize:11, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:4, cursor:"pointer", padding:"2px 8px" }}>riapri</button>
                               <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:14 }}>✕</button>
                             </div>
                           )
