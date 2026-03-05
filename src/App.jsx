@@ -164,14 +164,16 @@ function getSignal(it) {
 /* ═══════════════════════════════════════════════════════
    DATA SHAPE
    items[name] = {
-     meta: { note: string },
-     prices: [{ price:number, timestamp:iso, eventId:string, note:string }],
-     lots:   [{ qty:number, price:number, timestamp:iso, eventId:string, note:string, sold:false }]
-            // lots = acquisti. sold=true quando hai venduto
+     meta: { category, buyTarget, sellTarget, ndCost, ndQty, ndDiscount },
+     prices:   [{ price, timestamp, eventId, note }],
+     lots:     [{ id, qty, price, timestamp, eventId, note, sold }],
+     listings: [{ qty, listPrice, buyPrice, coveredQty, totalCost, lotLinks, listedAt, tax, sold, soldAt, lotsConsumed }]
    }
    events[date] = eventId
+   ndRate = number (gold per 1 ND)
 ═══════════════════════════════════════════════════════ */
 const CATEGORIES = ["—", "Accessori", "Armi", "Armature", "Consumabili", "Materiali", "Rune", "Pet", "Costume", "Item Shop ND", "Altro"]
+const ND_DISCOUNTS = [0, 10, 15, 20, 25, 30, 40, 50]
 const INIT = { items: {}, events: {} }
 
 /* ═══════════════════════════════════════════════════════
@@ -236,9 +238,8 @@ export default function App() {
 
   // nos dollari page
   const [ndBuyQty,    setNdBuyQty]    = useState("")
-  const [ndEventMode, setNdEventMode] = useState(false)
+  const [ndDiscount,  setNdDiscount]  = useState(0)  // global ND discount % (0 = no event)
   const [ndRateInput, setNdRateInput] = useState("")
-  const ndRateInit = useRef(false)
 
   // quick-add modal
   const [showQuick,   setShowQuick]   = useState(false)
@@ -279,7 +280,6 @@ export default function App() {
         }
         setData(d)
         if (d.ndRate) setNdRateInput(String(d.ndRate))
-        ndRateInit.current = true
         const names = Object.keys(d.items || {})
         if (names.length) { setSelItem(names[0]); setPage("item") }
       } catch { setData(INIT) }
@@ -499,18 +499,19 @@ export default function App() {
       .filter(name => data.items[name]?.meta?.category === "Item Shop ND")
       .map(name => {
         const it = data.items[name]
-        const ndCost      = it.meta?.ndCost || 0
-        const ndQty       = it.meta?.ndQty  || 1
-        const ndCostEvent = it.meta?.ndCostEvent || 0
-        const useCost     = ndEventMode && ndCostEvent > 0 ? ndCostEvent : ndCost
-        const ps          = it.prices || []
+        const ndCost    = it.meta?.ndCost || 0
+        const ndQty     = it.meta?.ndQty  || 1
+        const itemDisc  = it.meta?.ndDiscount || 0
+        const disc      = ndDiscount > 0 ? ndDiscount : itemDisc
+        const useCost   = disc > 0 ? Math.ceil(ndCost * (1 - disc / 100)) : ndCost
+        const ps        = it.prices || []
         const marketPrice = ps.length ? ps[ps.length - 1].price : null
-        const costGold    = useCost * rate
-        const revenue     = marketPrice != null ? marketPrice * ndQty : null
-        const profit      = revenue != null && costGold > 0 ? revenue - costGold : null
-        return { name, ndCost, ndQty, ndCostEvent, useCost, marketPrice, costGold, revenue, profit }
+        const costGold  = useCost * rate
+        const revenue   = marketPrice != null ? marketPrice * ndQty : null
+        const profit    = revenue != null && costGold > 0 ? revenue - costGold : null
+        return { name, ndCost, ndQty, disc, useCost, marketPrice, costGold, revenue, profit }
       })
-  }, [data, ndEventMode])
+  }, [data, ndDiscount])
 
   /* ── ANALISI ROWS ── */
   const analysisRows = useMemo(() => {
@@ -1388,12 +1389,16 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Event toggle */}
-                <div style={{ flex:"0 0 170px", background:C.panel, border:`1px solid ${ndEventMode?C.gold:C.border}`, borderRadius:10, padding:"14px 16px", cursor:"pointer", transition:"all .15s" }}
-                  onClick={()=>setNdEventMode(v=>!v)}>
-                  <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:6 }}>EVENTO SCONTO</div>
-                  <div style={{ fontSize:16, color:ndEventMode?C.gold:C.muted, fontWeight:700 }}>
-                    {ndEventMode ? "🔥 ATTIVO" : "OFF"}
+                {/* Event discount selector */}
+                <div style={{ flex:"0 0 200px", background:C.panel, border:`1px solid ${ndDiscount>0?"#f59e0b":C.border}`, borderRadius:10, padding:"14px 16px", transition:"all .15s" }}>
+                  <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:6 }}>SCONTO EVENTO</div>
+                  <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
+                    {ND_DISCOUNTS.map(d => (
+                      <button key={d} onClick={()=>setNdDiscount(d)}
+                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${ndDiscount===d?(d>0?"#f59e0b":C.border):C.border}`, background:ndDiscount===d?(d>0?"rgba(245,158,11,.18)":"rgba(255,255,255,.05)"):"transparent", color:ndDiscount===d?(d>0?"#f59e0b":C.text):C.muted }}>
+                        {d === 0 ? "OFF" : `-${d}%`}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1426,7 +1431,7 @@ export default function App() {
                 {/* header */}
                 <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", gap:6, fontSize:11, color:C.muted, letterSpacing:1 }}>
                   <div style={{ width:160, flexShrink:0 }}>ITEM</div>
-                  <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ND{ndEventMode ? " (EV)" : ""}</div>
+                  <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ND{ndDiscount > 0 ? ` (-${ndDiscount}%)` : ""}</div>
                   <div style={{ width:55, flexShrink:0, textAlign:"right" }}>PZ</div>
                   <div style={{ width:100, flexShrink:0, textAlign:"right" }}>MERCATO</div>
                   <div style={{ width:100, flexShrink:0, textAlign:"right" }}>COSTO ORO</div>
@@ -1440,9 +1445,9 @@ export default function App() {
                       onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("prices") }}
                       style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:6, cursor:"pointer" }}>
                       <div style={{ width:160, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
-                      <div style={{ width:80, flexShrink:0, fontSize:14, color:ndEventMode&&r.ndCostEvent>0?"#f59e0b":C.text, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>
+                      <div style={{ width:80, flexShrink:0, fontSize:14, color:r.disc>0?"#f59e0b":C.text, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>
                         {r.useCost > 0 ? r.useCost : "—"}
-                        {ndEventMode && r.ndCostEvent > 0 && <span style={{ fontSize:9, color:C.muted, display:"block" }}>base: {r.ndCost}</span>}
+                        {r.disc > 0 && r.useCost !== r.ndCost && <span style={{ fontSize:9, color:C.muted, display:"block", textDecoration:"line-through" }}>{r.ndCost}</span>}
                       </div>
                       <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.ndQty}</div>
                       <div style={{ width:100, flexShrink:0, fontSize:13, color:r.marketPrice!=null?C.text:C.muted, fontFamily:"monospace", textAlign:"right" }}>{r.marketPrice!=null?fmtG(r.marketPrice):"—"}</div>
@@ -1457,7 +1462,7 @@ export default function App() {
 
                 {/* inline edit section */}
                 <div style={{ marginTop:18, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
-                  <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>MODIFICA ND PER ITEM</div>
+                  <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>CONFIGURA ITEM ND</div>
                   <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                     {ndItems.map(r => {
                       const it = data.items[r.name]
@@ -1465,28 +1470,33 @@ export default function App() {
                         <div key={r.name} style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                           <span style={{ width:150, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flexShrink:0 }}>{r.name}</span>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ fontSize:11, color:C.muted, width:30 }}>ND:</span>
-                            <input type="number" min="0" value={it.meta?.ndCost || ""} onChange={e => {
+                            <span style={{ fontSize:11, color:C.muted }}>ND:</span>
+                            <input type="number" min="0" step="1" value={it.meta?.ndCost || ""} onChange={e => {
                               const v = parseInt(e.target.value) || 0
                               const updated = { ...it, meta: { ...it.meta, ndCost: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
                             }} placeholder="0" style={inp({ width:70, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ fontSize:11, color:C.muted, width:30 }}>PZ:</span>
-                            <input type="number" min="1" value={it.meta?.ndQty || ""} onChange={e => {
+                            <span style={{ fontSize:11, color:C.muted }}>PZ:</span>
+                            <input type="number" min="1" step="1" value={it.meta?.ndQty || ""} onChange={e => {
                               const v = parseInt(e.target.value) || 1
                               const updated = { ...it, meta: { ...it.meta, ndQty: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
                             }} placeholder="1" style={inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ fontSize:11, color:"#f59e0b", width:55 }}>🔥 EV:</span>
-                            <input type="number" min="0" value={it.meta?.ndCostEvent || ""} onChange={e => {
-                              const v = parseInt(e.target.value) || 0
-                              const updated = { ...it, meta: { ...it.meta, ndCostEvent: v } }
+                            <span style={{ fontSize:11, color:"#f59e0b" }}>sconto:</span>
+                            <select value={it.meta?.ndDiscount || 0} onChange={e => {
+                              const v = parseInt(e.target.value)
+                              const updated = { ...it, meta: { ...it.meta, ndDiscount: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
-                            }} placeholder="—" style={inp({ width:70, padding:"4px 8px", fontSize:12, textAlign:"center", color:"#f59e0b" })}/>
+                            }} style={{ background:"#1c1f2e", border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?"#f59e0b":C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
+                              {ND_DISCOUNTS.map(d => <option key={d} value={d}>{d===0?"—":`-${d}%`}</option>)}
+                            </select>
+                            {(it.meta?.ndDiscount||0) > 0 && it.meta?.ndCost > 0 && (
+                              <span style={{ fontSize:11, color:"#f59e0b", fontFamily:"monospace" }}>= {Math.ceil(it.meta.ndCost * (1 - (it.meta.ndDiscount)/100))} ND</span>
+                            )}
                           </div>
                         </div>
                       )
@@ -1543,7 +1553,6 @@ export default function App() {
                         style={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, padding:"2px 6px", fontSize:11, cursor:"pointer" }}>
                         {CATEGORIES.map(c => <option key={c} value={c}>{c === "—" ? "Nessuna categoria" : c}</option>)}
                       </select>
-                      {item?.meta?.note && <span style={{ color:"#7b8ba6" }}>{item.meta.note}</span>}
                     </div>
                   </div>
                 </div>
