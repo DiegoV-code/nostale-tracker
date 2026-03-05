@@ -1,4 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron')
+
+function onChannel(channel, transform) {
+  return (cb) => {
+    const handler = transform ? (_e, ...args) => cb(transform(...args)) : cb
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
+  }
+}
+
 contextBridge.exposeInMainWorld('api', {
   load:           ()        => ipcRenderer.invoke('load-data'),
   save:           d         => ipcRenderer.invoke('save-data', d),
@@ -9,8 +18,9 @@ contextBridge.exposeInMainWorld('api', {
   maximize:       ()        => ipcRenderer.send('win-maximize'),
   close:          ()        => ipcRenderer.send('win-close'),
   getVersion:     ()        => ipcRenderer.invoke('get-version'),
-  onUpdateAvailable:  (cb)  => ipcRenderer.on('update-available', cb),
-  onUpdateDownloaded: (cb)  => ipcRenderer.on('update-downloaded', cb),
-  onDownloadProgress: (cb)  => ipcRenderer.on('download-progress', (_e, info) => cb(info)),
-  installUpdate:  ()        => ipcRenderer.send('install-update'),
+  onUpdateAvailable:  onChannel('update-available'),
+  onUpdateDownloaded: onChannel('update-downloaded'),
+  onDownloadProgress: onChannel('download-progress', (info) => info),
+  onUpdateError:      onChannel('update-error', (msg) => msg),
+  flushAndInstallUpdate: (data) => ipcRenderer.invoke('flush-and-install', data),
 })

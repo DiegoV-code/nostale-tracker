@@ -184,8 +184,9 @@ export default function App() {
   const [saveStatus, setSaveStatus]= useState("idle")
   const [dataPath,   setDataPath]  = useState("")
   const [appVersion, setAppVersion]= useState("4.0.0")
-  const [updateStatus, setUpdateStatus] = useState(null) // null | "available" | "downloading" | "downloaded"
+  const [updateStatus, setUpdateStatus] = useState(null) // null | "available" | "downloading" | "downloaded" | "error"
   const [downloadPct, setDownloadPct] = useState(0)
+  const [updateError, setUpdateError] = useState("")
 
   // navigation
   const [page,    setPage]    = useState("dashboard")   // dashboard | item | new
@@ -286,9 +287,13 @@ export default function App() {
     })()
     // version + auto-update listeners
     window.api.getVersion?.().then(v => v && setAppVersion(v))
-    window.api.onUpdateAvailable?.(() => setUpdateStatus("available"))
-    window.api.onDownloadProgress?.((info) => { setUpdateStatus("downloading"); setDownloadPct(Math.round(info.percent || 0)) })
-    window.api.onUpdateDownloaded?.(() => setUpdateStatus("downloaded"))
+    const unsubs = [
+      window.api.onUpdateAvailable?.(() => setUpdateStatus("available")),
+      window.api.onDownloadProgress?.((info) => { setUpdateStatus("downloading"); setDownloadPct(Math.round(info.percent || 0)) }),
+      window.api.onUpdateDownloaded?.(() => setUpdateStatus("downloaded")),
+      window.api.onUpdateError?.((msg) => { setUpdateStatus("error"); setUpdateError(msg) }),
+    ]
+    return () => unsubs.forEach(fn => fn?.())
   }, [])
 
   /* ── SAVE (debounced) ── */
@@ -882,7 +887,7 @@ export default function App() {
         <span style={{ color:C.muted, fontSize:12, letterSpacing:1 }}>v{appVersion}</span>
 
         {updateStatus === "downloaded" && (
-          <button onClick={() => window.api.installUpdate()} style={{ background:"rgba(76,175,80,.15)", border:"1px solid #4caf50", borderRadius:7, color:"#4caf50", cursor:"pointer", padding:"4px 12px", fontSize:11, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", animation:"pulse 2s infinite" }}>
+          <button onClick={() => window.api.flushAndInstallUpdate(data)} style={{ background:"rgba(76,175,80,.15)", border:"1px solid #4caf50", borderRadius:7, color:"#4caf50", cursor:"pointer", padding:"4px 12px", fontSize:11, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", animation:"pulse 2s infinite" }}>
             🔄 Aggiorna ora
           </button>
         )}
@@ -896,6 +901,9 @@ export default function App() {
         )}
         {updateStatus === "available" && (
           <span style={{ color:"#ffa726", fontSize:11, letterSpacing:1 }}>⬇️ Preparazione aggiornamento...</span>
+        )}
+        {updateStatus === "error" && (
+          <span title={updateError} style={{ color:"#f44336", fontSize:11, letterSpacing:1, cursor:"help" }}>⚠️ Aggiornamento fallito</span>
         )}
 
         <div style={{ flex:1 }}/>

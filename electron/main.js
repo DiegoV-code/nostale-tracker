@@ -62,7 +62,16 @@ ipcMain.on('win-maximize', () => win?.isMaximized() ? win.unmaximize() : win?.ma
 ipcMain.on('win-close',    () => win?.close())
 
 ipcMain.handle('get-version', () => app.getVersion())
-ipcMain.on('install-update', () => {
+ipcMain.handle('flush-and-install', (_, data) => {
+  // Flush any pending data to disk before installing update
+  if (data) {
+    try {
+      const dir = ensureDir()
+      const f   = path.join(dir, 'data.json')
+      if (fs.existsSync(f)) fs.copyFileSync(f, path.join(dir, 'data.backup.json'))
+      fs.writeFileSync(f, JSON.stringify(data, null, 2), 'utf-8')
+    } catch (e) { console.error('Flush before update failed:', e.message) }
+  }
   // Remove quit listener so app doesn't fight the updater
   app.removeAllListeners('window-all-closed')
   // Destroy all windows immediately to release file handles
@@ -91,7 +100,10 @@ function createWindow() {
       autoUpdater.on('update-available', () => win.webContents.send('update-available'))
       autoUpdater.on('download-progress', (info) => win.webContents.send('download-progress', info))
       autoUpdater.on('update-downloaded', () => win.webContents.send('update-downloaded'))
-      autoUpdater.on('error', (err) => console.error('AutoUpdater error:', err.message))
+      autoUpdater.on('error', (err) => {
+        console.error('AutoUpdater error:', err.message)
+        win.webContents.send('update-error', err.message)
+      })
       autoUpdater.checkForUpdatesAndNotify()
     }
   })
