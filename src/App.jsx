@@ -720,8 +720,8 @@ export default function App() {
 
   const inp = (extra={}) => ({
     background: "#0f1119", border: `1px solid ${C.border2}`,
-    borderRadius: 7, color: C.text, padding: "8px 11px",
-    fontSize: 14, fontFamily: "monospace", outline: "none",
+    borderRadius: 8, color: C.text, padding: "10px 13px",
+    fontSize: 15, fontFamily: "monospace", outline: "none",
     width: "100%", transition: "border-color .15s",
     ...extra
   })
@@ -730,8 +730,8 @@ export default function App() {
     background: active ? col : "transparent",
     border: `1px solid ${active ? col : C.border2}`,
     color: active ? "#0f1119" : col,
-    borderRadius: 7, padding: "7px 14px", cursor: "pointer",
-    fontSize: 13, fontWeight: 700, letterSpacing: 1,
+    borderRadius: 8, padding: "9px 16px", cursor: "pointer",
+    fontSize: 14, fontWeight: 700, letterSpacing: 1,
     transition: "all .15s", ...extra
   })
 
@@ -763,9 +763,9 @@ export default function App() {
 
       {/* ══ TITLEBAR ══ */}
       <div style={{ height:46, background:C.panel, borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", paddingLeft:16, paddingRight:12, gap:14, flexShrink:0, WebkitAppRegion:"drag" }}>
-        <span style={{ fontSize:17 }}>⚔️</span>
-        <span style={{ color:C.gold, fontWeight:700, letterSpacing:2, fontSize:15 }}>NOSTALE TRACKER</span>
-        <span style={{ color:C.muted, fontSize:11, letterSpacing:2 }}>v{appVersion}</span>
+        <span style={{ fontSize:19 }}>⚔️</span>
+        <span style={{ color:C.gold, fontWeight:700, letterSpacing:2, fontSize:17 }}>NOSTALE TRACKER</span>
+        <span style={{ color:C.muted, fontSize:12, letterSpacing:1 }}>v{appVersion}</span>
 
         {updateStatus === "downloaded" && (
           <button onClick={() => window.api.installUpdate()} style={{ background:"rgba(76,175,80,.15)", border:"1px solid #4caf50", borderRadius:7, color:"#4caf50", cursor:"pointer", padding:"4px 12px", fontSize:11, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", animation:"pulse 2s infinite" }}>
@@ -788,7 +788,7 @@ export default function App() {
 
         {/* Event selector */}
         <div style={{ display:"flex", alignItems:"center", gap:8, WebkitAppRegion:"no-drag" }}>
-          <span style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>EVENTO OGGI:</span>
+          <span style={{ fontSize:12, color:C.muted }}>Evento:</span>
           <select value={curEventId} onChange={e=>setCurEvt(e.target.value)}
             style={{ background:"#1c1f2e", border:`1px solid ${curEvt.color}`, borderRadius:7, color:curEvt.color, padding:"5px 9px", fontSize:13, fontWeight:700, cursor:"pointer", WebkitAppRegion:"no-drag" }}>
             {EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.icon} {ev.label}</option>)}
@@ -832,7 +832,7 @@ export default function App() {
           {/* top nav */}
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
             {[["dashboard","🏠"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
-              <div key={t} onClick={()=>setPage(t)} style={{ flex:1, textAlign:"center", padding:"9px 0", fontSize:13, cursor:"pointer", letterSpacing:1, color:page===t?C.gold:C.muted, borderBottom:`2px solid ${page===t?C.gold:"transparent"}`, transition:"all .15s" }}>{l}</div>
+              <div key={t} onClick={()=>setPage(t)} style={{ flex:1, textAlign:"center", padding:"10px 0", fontSize:15, cursor:"pointer", color:page===t?C.gold:C.muted, borderBottom:`2px solid ${page===t?C.gold:"transparent"}`, transition:"all .15s" }}>{l}</div>
             ))}
           </div>
 
@@ -845,24 +845,7 @@ export default function App() {
               <select value={newCat} onChange={e=>setNewCat(e.target.value)} style={inp()}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button onClick={addItem} disabled={!newName.trim()} style={{ ...pill(!!newName.trim()), marginTop:4, padding:"9px" }}>AGGIUNGI ITEM →</button>
-
-              <div style={{ marginTop:6, borderTop:`1px solid ${C.border}`, paddingTop:10, display:"flex", flexDirection:"column", gap:7 }}>
-                {[
-                  { icon:"📈", title:"Prezzi", desc:"Registra i prezzi che vedi al bazar. L'app calcola automaticamente media, min, max e ti dice se è un buon momento per comprare." },
-                  { icon:"📦", title:"Magazzino", desc:"Traccia cosa hai comprato e a quanto. Vedi subito il tuo investimento e quanto guadagneresti vendendo ora." },
-                  { icon:"🏷️", title:"In Vendita", desc:"Quando metti qualcosa al bazar, segnalo qui. Premi VENDUTO quando viene venduto e scopri il tuo ROI e il tempo di vendita." },
-                  { icon:"📊", title:"Grafici", desc:"Visualizza l'andamento del prezzo nel tempo e le differenze tra giorni normali ed eventi." },
-                ].map(s => (
-                  <div key={s.title} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                    <span style={{ fontSize:15, flexShrink:0, marginTop:1 }}>{s.icon}</span>
-                    <div>
-                      <div style={{ fontSize:11, color:C.text, fontWeight:700 }}>{s.title}</div>
-                      <div style={{ fontSize:12, color:"#6b7a96", lineHeight:1.5, marginTop:1 }}>{s.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <button onClick={addItem} disabled={!newName.trim()} style={{ ...pill(!!newName.trim()), marginTop:4, padding:"10px" }}>AGGIUNGI ITEM</button>
             </div>
           ) : (
             /* ── ITEM LIST ── */
@@ -897,19 +880,19 @@ export default function App() {
                       onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]); navigator.clipboard.writeText(name); setCopyFlash(true); setTimeout(()=>setCopyFlash(false),800) }}
                       style={{ padding:"8px 9px", paddingLeft:11, borderRadius:7, background:active?"rgba(245,158,11,.09)":"transparent", border:`1px solid ${active?C.gold+"55":isEsaurito?"#a78bfa33":"transparent"}`, borderLeft:`3px solid ${sig.color}44`, transition:"all .15s", position:"relative" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <span style={{ fontSize:13, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
+                        <span style={{ fontSize:14, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:130, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
                         {isEsaurito
-                          ? <span style={{ fontSize:12, color:"#a78bfa", background:"rgba(167,139,250,.12)", borderRadius:4, padding:"1px 5px" }}>📭</span>
-                          : sig.type !== "nodata" && <span style={{ fontSize:12, color:sig.color, fontWeight:700 }}>{sig.icon}</span>}
+                          ? <span style={{ fontSize:13, color:"#a78bfa", background:"rgba(167,139,250,.12)", borderRadius:4, padding:"2px 6px" }}>📭</span>
+                          : sig.type !== "nodata" && <span style={{ fontSize:13, color:sig.color, fontWeight:700 }}>{sig.icon}</span>}
                       </div>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:3 }}>
-                        <span style={{ fontSize:13, color:isEsaurito?"#a78bfa":C.muted, fontFamily:"monospace" }}>{last != null ? fmtG(last) : "—"}</span>
+                        <span style={{ fontSize:14, color:isEsaurito?"#a78bfa":C.muted, fontFamily:"monospace" }}>{last != null ? fmtG(last) : "—"}</span>
                         <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                          {openQty > 0 && <span style={{ fontSize:12, color:C.blue, background:"rgba(59,130,246,.1)", borderRadius:4, padding:"1px 5px" }}>×{openQty}</span>}
-                          {!isEsaurito && <span style={{ fontSize:12, color:tColor }}>{trend}</span>}
+                          {openQty > 0 && <span style={{ fontSize:13, color:C.blue, background:"rgba(59,130,246,.1)", borderRadius:4, padding:"2px 6px" }}>×{openQty}</span>}
+                          {!isEsaurito && <span style={{ fontSize:13, color:tColor }}>{trend}</span>}
                         </div>
                       </div>
-                      <div style={{ fontSize:11, color:"#6b7a96", marginTop:2 }}>
+                      <div style={{ fontSize:12, color:"#6b7a96", marginTop:2 }}>
                         {count} prezzi{cat ? ` · ${cat}` : ""}
                       </div>
                     </div>
@@ -1063,25 +1046,18 @@ export default function App() {
                 </div>
               ) : (<>
 
-              {/* Intro */}
-              <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:9, padding:"12px 16px", marginBottom:14, fontSize:13, color:C.muted, lineHeight:1.7 }}>
-                Confronta tutti i tuoi item in un'unica vista. <b style={{color:C.text}}>Clicca su una colonna</b> per ordinare. <b style={{color:C.text}}>Clicca su una riga</b> per aprire l'item. I segnali si basano sul confronto tra il prezzo attuale e la media storica.
-              </div>
-
-              {/* Legenda segnali */}
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+              {/* Legenda segnali — compatta con tooltip */}
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:14 }}>
                 {[
-                  { label:"🟢 FORTE COMPRA", hint:"−15%+ sotto media",  color:"#10b981", bg:"rgba(16,185,129,.12)"  },
-                  { label:"🟢 COMPRA",       hint:"−6% sotto media",    color:"#34d399", bg:"rgba(52,211,153,.08)"  },
-                  { label:"🟡 NELLA NORMA",  hint:"prezzo stabile",      color:"#f59e0b", bg:"rgba(245,158,11,.08)"  },
-                  { label:"🟠 SOPRA MEDIA",  hint:"+6% sopra media",    color:"#f97316", bg:"rgba(249,115,22,.08)"  },
-                  { label:"🔴 TROPPO CARO",  hint:"+15%+ sopra media",  color:"#ef4444", bg:"rgba(239,68,68,.10)"   },
-                  { label:"🔵 VENDI",        hint:"hai stock, vendi",    color:"#3b82f6", bg:"rgba(59,130,246,.10)"  },
-                  { label:"📭 ESAURITO",     hint:"non disponibile",     color:"#a78bfa", bg:"rgba(167,139,250,.1)" },
+                  { label:"🟢 COMPRA",      hint:"Sotto media",       color:"#10b981", bg:"rgba(16,185,129,.12)"  },
+                  { label:"🟡 NORMA",        hint:"Prezzo stabile",    color:"#f59e0b", bg:"rgba(245,158,11,.08)"  },
+                  { label:"🟠 SOPRA",        hint:"Sopra media",       color:"#f97316", bg:"rgba(249,115,22,.08)"  },
+                  { label:"🔴 CARO",         hint:"+15%+ sopra media", color:"#ef4444", bg:"rgba(239,68,68,.10)"   },
+                  { label:"🔵 VENDI",        hint:"Hai stock, vendi",  color:"#3b82f6", bg:"rgba(59,130,246,.10)"  },
+                  { label:"📭 ESAURITO",     hint:"Non disponibile",   color:"#a78bfa", bg:"rgba(167,139,250,.1)" },
                 ].map(s => (
-                  <div key={s.label} style={{ background:s.bg, border:`1px solid ${s.color}55`, borderRadius:6, padding:"4px 10px", fontSize:11, color:s.color }}>
-                    <div style={{ fontWeight:700 }}>{s.label}</div>
-                    <div style={{ fontSize:11, opacity:.7, marginTop:1 }}>{s.hint}</div>
+                  <div key={s.label} title={s.hint} style={{ background:s.bg, border:`1px solid ${s.color}55`, borderRadius:6, padding:"4px 10px", fontSize:12, color:s.color, fontWeight:700, cursor:"help" }}>
+                    {s.label}
                   </div>
                 ))}
               </div>
@@ -1115,7 +1091,7 @@ export default function App() {
                   })
 
                   const Th = ({ k, l, w, title }) => (
-                    <div onClick={()=>sortAnalysis(k)} title={title||l} style={{ width:w, minWidth:w, fontSize:11, color:sortCol===k?C.gold:C.muted, letterSpacing:1.5, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3 }}>
+                    <div onClick={()=>sortAnalysis(k)} title={title||l} style={{ width:w, minWidth:w, fontSize:12, color:sortCol===k?C.gold:C.muted, letterSpacing:1, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3 }}>
                       {l}{sortCol===k ? (sortDir===1?"▲":"▼") : ""}
                     </div>
                   )
@@ -1178,8 +1154,8 @@ export default function App() {
                 })()}
               </div>
 
-              <div style={{ marginTop:10, fontSize:11, color:"#6b7a96" }}>
-                {analysisRows.length} item · Clicca su una colonna per ordinare · Clicca su un item per aprirlo
+              <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
+                {analysisRows.length} item
               </div>
               </>)}
             </div>
@@ -1260,15 +1236,14 @@ export default function App() {
                 return (
                   <div style={{ display:"flex", gap:10, alignItems:"stretch", marginBottom:14, flexWrap:"wrap" }}>
                     {/* Segnale attuale */}
-                    <div style={{ background:sig.bg, border:`1px solid ${sig.color}66`, borderRadius:10, padding:"12px 18px", display:"flex", alignItems:"center", gap:12, minWidth:220 }}>
-                      <span style={{ fontSize:28 }}>{sig.icon}</span>
+                    <div title={sig.hint || ""} style={{ background:sig.bg, border:`1px solid ${sig.color}66`, borderRadius:10, padding:"14px 20px", display:"flex", alignItems:"center", gap:14, minWidth:220, cursor:sig.hint?"help":"default" }}>
+                      <span style={{ fontSize:32 }}>{sig.icon}</span>
                       <div>
-                        <div style={{ fontSize:11, color:sig.color, letterSpacing:2, fontWeight:700 }}>SEGNALE DI TRADING</div>
-                        <div style={{ fontSize:20, color:sig.color, fontWeight:700, marginTop:2 }}>{sig.label}</div>
-                        {sig.hint && <div style={{ fontSize:12, color:C.muted, marginTop:4, maxWidth:280, lineHeight:1.5 }}>{sig.hint}</div>}
+                        <div style={{ fontSize:12, color:sig.color, letterSpacing:2, fontWeight:700 }}>SEGNALE</div>
+                        <div style={{ fontSize:22, color:sig.color, fontWeight:700, marginTop:2 }}>{sig.label}</div>
                         {sig.diffPct != null && (
-                          <div style={{ fontSize:11, color:sig.color, opacity:.7, marginTop:4 }}>
-                            {sig.diffPct>=0?"+":""}{(sig.diffPct*100).toFixed(1)}% vs media storica
+                          <div style={{ fontSize:13, color:sig.color, opacity:.8, marginTop:4, fontFamily:"monospace" }}>
+                            {sig.diffPct>=0?"+":""}{(sig.diffPct*100).toFixed(1)}% vs media
                           </div>
                         )}
                       </div>
@@ -1276,13 +1251,10 @@ export default function App() {
 
                     {/* Diff evento */}
                     {diffEv != null && (
-                      <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 16px", minWidth:160 }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:4 }}>DURANTE EVENTI</div>
-                        <div style={{ fontSize:18, color:diffEv<=0?C.green:C.red, fontWeight:700, fontFamily:"monospace" }}>
+                      <div title={diffEv<=0 ? "Prezzi calano durante eventi" : "Prezzi salgono durante eventi"} style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"14px 18px", minWidth:160, cursor:"help" }}>
+                        <div style={{ fontSize:12, color:C.muted, letterSpacing:2, marginBottom:4 }}>EVENTI</div>
+                        <div style={{ fontSize:20, color:diffEv<=0?C.green:C.red, fontWeight:700, fontFamily:"monospace" }}>
                           {diffEv>=0?"+":""}{diffEv.toFixed(1)}%
-                        </div>
-                        <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>
-                          {diffEv<=0 ? "↓ prezzi calano → buono per comprare" : "↑ prezzi salgono durante eventi"}
                         </div>
                       </div>
                     )}
@@ -1379,10 +1351,6 @@ export default function App() {
                 <div>
                   {/* input */}
                   <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:11, padding:18, marginBottom:14 }}>
-                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:14 }}>
-                      REGISTRA PREZZO — {todayStr()} {fmtTime(new Date())}
-                      <span style={{ marginLeft:12, color:curEvt.color }}>{curEvt.icon} {curEvt.id!=="none"?curEvt.label:""}</span>
-                    </div>
                     <div style={{ display:"flex", gap:10, alignItems:"flex-end", flexWrap:"wrap" }}>
                       <div style={{ flex:"0 0 160px" }}>
                         <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>PREZZO</div>
@@ -1390,7 +1358,7 @@ export default function App() {
                           value={pVal} onChange={e=>setPVal(e.target.value)}
                           onKeyDown={e=>e.key==="Enter"&&recordPrice()}
                           placeholder="150000 oppure 150k"
-                          style={inp({ fontSize:17, color:C.gold })}
+                          style={inp({ fontSize:19, color:C.gold })}
                         />
                         {pVal && !isNaN(parseG(pVal)) && (
                           <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>= {parseG(pVal).toLocaleString("it-IT")} ori · {fmtG(parseG(pVal))}</div>
@@ -1487,10 +1455,6 @@ export default function App() {
 
                   {/* lot input */}
                   <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:11, padding:18, marginBottom:14 }}>
-                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:14 }}>
-                      REGISTRA ACQUISTO — MAGAZZINO
-                      <span style={{ marginLeft:10, color:curEvt.color }}>{curEvt.icon} {curEvt.id!=="none"?curEvt.label:""}</span>
-                    </div>
                     <div style={{ display:"flex", gap:10, alignItems:"flex-end", flexWrap:"wrap" }}>
                       <div style={{ flex:"0 0 100px" }}>
                         <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>QUANTITÀ (max 999)</div>
@@ -1598,10 +1562,6 @@ export default function App() {
 
                   {/* form nuovo listing */}
                   <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:11, padding:18, marginBottom:14 }}>
-                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:14 }}>
-                      METTI AL BAZAR
-                      <span style={{ marginLeft:10, color:curEvt.color }}>{curEvt.icon} {curEvt.id!=="none"?curEvt.label:""}</span>
-                    </div>
                     <div style={{ display:"flex", gap:10, alignItems:"flex-end", flexWrap:"wrap" }}>
                       <div style={{ flex:"0 0 90px" }}>
                         <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>QUANTITÀ</div>
@@ -1876,10 +1836,7 @@ export default function App() {
             {/* header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
               <div>
-                <div style={{ fontSize:15, color:C.gold, fontWeight:700, letterSpacing:2 }}>⚡ QUICK-ADD PREZZI</div>
-                <div style={{ fontSize:11, color:C.muted, marginTop:3, letterSpacing:1 }}>
-                  Registra prezzi su più item senza navigare · <span style={{ color:"#7b8ba6" }}>ESC per chiudere</span>
-                </div>
+                <div style={{ fontSize:17, color:C.gold, fontWeight:700, letterSpacing:2 }}>⚡ QUICK-ADD</div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <span style={{ fontSize:11, color:curEvt.color }}>{curEvt.icon} {curEvt.id !== "none" ? curEvt.label : "Nessun evento"}</span>
@@ -1906,7 +1863,7 @@ export default function App() {
                   const lastP = ps.filter(p => !p.esaurito)
                   const last = lastP.length ? lastP[lastP.length-1] : null
                   return last ? (
-                    <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
+                    <div style={{ fontSize:13, color:C.muted, marginTop:5 }}>
                       Ultimo: <b style={{ color:C.gold }}>{fmtG(last.price)}</b> — {fmtFull(last.timestamp)}
                     </div>
                   ) : null
@@ -1969,10 +1926,6 @@ export default function App() {
               </div>
             )}
 
-            {/* tips */}
-            <div style={{ marginTop:14, fontSize:12, color:"#7b8ba6", lineHeight:1.8 }}>
-              💡 <b style={{color:C.muted}}>Enter</b> salva e avanza al prossimo item (nome copiato) · <b style={{color:C.muted}}>⎘</b> copia nome · <b style={{color:C.muted}}>Esc</b> chiudi · <b style={{color:C.muted}}>Ctrl+Q</b> apri
-            </div>
           </div>
         </div>
       )}
