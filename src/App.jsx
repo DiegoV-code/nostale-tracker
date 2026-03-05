@@ -530,6 +530,105 @@ export default function App() {
     return { rows, totalQty, totalSpent, totalEstValue, totalEstProfit, itemCount, avgAgeDays }
   }, [data])
 
+  /* ── STAGING & PERFORMANCE ANALYTICS ── */
+  const performanceAnalytics = useMemo(() => {
+    if (!data) return { byItem: [], topROI: [], worstROI: [], fastSellers: [], slowSellers: [], capitalChart: [] }
+    const byItem = []
+    for (const name of Object.keys(data.items || {})) {
+      const it = data.items[name]
+      const lots = it.lots || []
+      const lsList = it.listings || []
+      const ps = it.prices || []
+
+      // Staging: time from lot purchase to first listing that consumed it
+      const soldLots = lots.filter(l => l.sold)
+      const openLots = lots.filter(l => !l.sold)
+      const activeListings = lsList.filter(l => !l.sold)
+      const soldListings = lsList.filter(l => l.sold)
+
+      // Staging time: for each listing, time from its listedAt to the earliest lot timestamp linked
+      const stagingDays = []
+      for (const ls of lsList) {
+        if (!ls.lotLinks || !ls.lotLinks.length) continue
+        // Find earliest lot used by this listing
+        for (const lk of ls.lotLinks) {
+          const lot = lots.find(l => l.id === lk.lotId)
+          if (lot) {
+            const days = (new Date(ls.listedAt) - new Date(lot.timestamp)) / 86400000
+            stagingDays.push(days)
+          }
+        }
+      }
+      const avgStaging = stagingDays.length ? stagingDays.reduce((a, b) => a + b, 0) / stagingDays.length : null
+      const minStaging = stagingDays.length ? Math.min(...stagingDays) : null
+      const maxStaging = stagingDays.length ? Math.max(...stagingDays) : null
+
+      // Sell time: listing to sold
+      const sellDays = soldListings.filter(l => l.soldAt).map(l => (new Date(l.soldAt) - new Date(l.listedAt)) / 86400000)
+      const avgSell = sellDays.length ? sellDays.reduce((a, b) => a + b, 0) / sellDays.length : null
+      const minSell = sellDays.length ? Math.min(...sellDays) : null
+      const maxSell = sellDays.length ? Math.max(...sellDays) : null
+
+      // Full cycle: lot purchase to sold listing
+      const cycleDays = []
+      for (const ls of soldListings) {
+        if (!ls.soldAt || !ls.lotLinks) continue
+        for (const lk of ls.lotLinks) {
+          const lot = lots.find(l => l.id === lk.lotId)
+          if (lot) cycleDays.push((new Date(ls.soldAt) - new Date(lot.timestamp)) / 86400000)
+        }
+      }
+      const avgCycle = cycleDays.length ? cycleDays.reduce((a, b) => a + b, 0) / cycleDays.length : null
+
+      // ROI
+      const soldWithBuy = soldListings.filter(l => l.buyPrice != null)
+      const totalRevenue = soldWithBuy.reduce((a, l) => a + l.listPrice * (l.coveredQty || l.qty), 0)
+      const totalCost = soldWithBuy.reduce((a, l) => a + l.buyPrice * (l.coveredQty || l.qty), 0)
+      const totalTax = soldWithBuy.reduce((a, l) => a + (l.tax || 0), 0)
+      const totalProfit = totalRevenue - totalCost - totalTax
+      const roiPct = totalCost > 0 ? (totalProfit / totalCost) * 100 : null
+
+      // Profit per day (efficiency)
+      const profitPerDay = avgSell != null && avgSell > 0 && totalProfit !== 0
+        ? totalProfit / soldWithBuy.length / avgSell : null
+
+      // Capital tied up
+      const openValue = openLots.reduce((a, l) => a + l.qty * l.price, 0)
+      const bazarValue = activeListings.reduce((a, l) => a + l.qty * l.listPrice, 0)
+
+      // Sell-through rate
+      const totalListed = lsList.reduce((a, l) => a + l.qty, 0)
+      const totalSold = soldListings.reduce((a, l) => a + l.qty, 0)
+      const sellThrough = totalListed > 0 ? (totalSold / totalListed) * 100 : null
+
+      if (lots.length > 0 || lsList.length > 0) {
+        byItem.push({
+          name, avgStaging, minStaging, maxStaging, avgSell, minSell, maxSell, avgCycle,
+          roiPct, totalProfit, profitPerDay, openValue, bazarValue,
+          sellThrough, soldCount: soldListings.length, totalListed, totalSold,
+          stockQty: openLots.reduce((a, l) => a + l.qty, 0),
+          bazarQty: activeListings.reduce((a, l) => a + l.qty, 0)
+        })
+      }
+    }
+
+    // Rankings
+    const withROI = byItem.filter(r => r.roiPct != null)
+    const topROI = [...withROI].sort((a, b) => b.roiPct - a.roiPct).slice(0, 5)
+    const worstROI = [...withROI].sort((a, b) => a.roiPct - b.roiPct).slice(0, 5)
+    const withSell = byItem.filter(r => r.avgSell != null)
+    const fastSellers = [...withSell].sort((a, b) => a.avgSell - b.avgSell).slice(0, 5)
+    const slowSellers = [...withSell].sort((a, b) => b.avgSell - a.avgSell).slice(0, 5)
+
+    // Capital distribution chart data
+    const capitalChart = byItem
+      .filter(r => r.openValue > 0 || r.bazarValue > 0)
+      .map(r => ({ name: r.name, magazzino: r.openValue, bazar: r.bazarValue, totale: r.openValue + r.bazarValue }))
+      .sort((a, b) => b.totale - a.totale)
+
+    return { byItem, topROI, worstROI, fastSellers, slowSellers, capitalChart }
+  }, [data])
+
   /* ── NOS DOLLARI — items with category "Item Shop ND" ── */
   const ndItems = useMemo(() => {
     if (!data) return []
@@ -1278,10 +1377,7 @@ export default function App() {
                     { k:"signal",     l:"SEGNALE",    w:"130px", title:"Segnale di trading: COMPRA / VENDI / NELLA NORMA basato sulla media"   },
                     { k:"current",    l:"PREZZO",     w:"100px", title:"Ultimo prezzo registrato al bazar"                                     },
                     { k:"diffPct",    l:"vs MEDIA",   w:"80px",  title:"Differenza % tra il prezzo attuale e la media storica"                 },
-                    { k:"stockQty",   l:"STOCK",      w:"60px",  title:"Quantità di item in magazzino (acquistati ma non ancora venduti)"       },
-                    { k:"bazarQty",   l:"AL BAZAR",   w:"70px",  title:"Quantità di item attualmente in vendita al bazar"                      },
                     { k:"roiPct",     l:"ROI%",       w:"70px",  title:"Return on Investment: profitto medio % sulle vendite chiuse"           },
-                    { k:"avgSellMs",  l:"TEMPO VEND.",w:"90px",  title:"Tempo medio impiegato per vendere un listing dal momento del messo in vendita" },
                     { k:"totalProfit",l:"PROFITTO",   w:"90px",  title:"Profitto totale realizzato da tutte le vendite chiuse di questo item"   },
                     { k:"trend7",     l:"TREND 7GG",  w:"90px",  title:"Andamento del prezzo negli ultimi 7 giorni (regressione lineare)"      },
                     { k:"vol",        l:"STABILITÀ",  w:"80px",  title:"Stabilità del prezzo: STABILE = poco rischio, INSTABILE = molto rischio" },
@@ -1330,17 +1426,9 @@ export default function App() {
                           <div style={{ width:"80px", minWidth:"80px", fontSize:13, color:sig.type==="nodata"?C.muted:sig.diffPct!=null?(sig.diffPct<=0?C.green:C.red):C.muted, fontWeight:700, fontFamily:"monospace" }}>
                             {sig.diffPct!=null ? `${sig.diffPct>=0?"+":""}${(sig.diffPct*100).toFixed(1)}%` : "—"}
                           </div>
-                          {/* Stock */}
-                          <div style={{ width:"60px", minWidth:"60px", fontSize:13, color:r.stockQty>0?C.blue:C.muted }}>{r.stockQty>0?`×${r.stockQty}`:"—"}</div>
-                          {/* Bazar */}
-                          <div style={{ width:"70px", minWidth:"70px", fontSize:13, color:r.bazarQty>0?C.gold:C.muted }}>{r.bazarQty>0?`×${r.bazarQty}`:"—"}</div>
                           {/* ROI% */}
                           <div style={{ width:"70px", minWidth:"70px", fontSize:13, color:r.roiPct!=null?(r.roiPct>=0?C.green:C.red):C.muted, fontWeight:700, fontFamily:"monospace" }}>
                             {r.roiPct!=null ? `${r.roiPct>=0?"+":""}${r.roiPct.toFixed(1)}%` : "—"}
-                          </div>
-                          {/* Tempo vendita */}
-                          <div style={{ width:"80px", minWidth:"80px", fontSize:13, color:r.avgSellMs!=null?(r.avgSellMs<86400000?C.green:r.avgSellMs<3*86400000?C.gold:C.red):C.muted }}>
-                            {r.avgSellMs!=null ? fmtSellTime(0, r.avgSellMs) : "—"}
                           </div>
                           {/* Profitto */}
                           <div style={{ width:"90px", minWidth:"90px", fontSize:13, color:r.totalProfit>0?C.green:r.totalProfit<0?C.red:C.muted, fontWeight:700, fontFamily:"monospace" }}>
@@ -1466,6 +1554,77 @@ export default function App() {
               <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
                 {bazarOverview.rows.length} listing attivi
               </div>
+
+              {/* ── BAZAR ANALYTICS ── */}
+              {performanceAnalytics.byItem.length > 0 && (<>
+
+                {/* Sell Time per Item */}
+                {performanceAnalytics.byItem.some(r => r.avgSell != null) && (
+                  <div style={{ marginTop:20 }}>
+                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO DI VENDITA — BAZAR → VENDUTO (giorni)</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                      <div style={{ display:"flex", padding:"4px 12px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
+                        <div style={{ width:150, flexShrink:0 }}>ITEM</div>
+                        <div style={{ width:70, textAlign:"right" }}>MEDIA</div>
+                        <div style={{ width:70, textAlign:"right" }}>MIN</div>
+                        <div style={{ width:70, textAlign:"right" }}>MAX</div>
+                        <div style={{ width:70, textAlign:"right" }}>TASSO</div>
+                        <div style={{ width:90, textAlign:"right" }}>ORO/GIORNO</div>
+                        <div style={{ flex:1 }}/>
+                        <div style={{ width:120 }}>VELOCITÀ</div>
+                      </div>
+                      {performanceAnalytics.byItem.filter(r => r.avgSell != null).sort((a,b) => a.avgSell - b.avgSell).map(r => {
+                        const maxBar = Math.max(...performanceAnalytics.byItem.filter(x => x.avgSell != null).map(x => x.avgSell))
+                        const pct = maxBar > 0 ? (1 - r.avgSell / maxBar) * 100 : 100
+                        const barColor = r.avgSell <= 1 ? C.green : r.avgSell <= 3 ? C.gold : C.red
+                        return (
+                          <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:10, background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
+                            <div style={{ width:150, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:13, fontFamily:"monospace", fontWeight:700, color:barColor }}>{r.avgSell < 1 ? "<1g" : r.avgSell.toFixed(1)+"g"}</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.green }}>{r.minSell < 1 ? "<1g" : r.minSell.toFixed(1)+"g"}</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.red }}>{r.maxSell.toFixed(1)}g</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:r.sellThrough!=null?(r.sellThrough>=75?C.green:r.sellThrough>=50?C.gold:C.red):C.muted }}>{r.sellThrough != null ? r.sellThrough.toFixed(0)+"%" : "—"}</div>
+                            <div style={{ width:90, textAlign:"right", fontSize:12, fontFamily:"monospace", color:r.profitPerDay!=null?(r.profitPerDay>=0?C.green:C.red):C.muted }}>{r.profitPerDay != null ? fmtG(Math.round(r.profitPerDay)) : "—"}</div>
+                            <div style={{ flex:1 }}/>
+                            <div style={{ width:120, height:10, background:"#0f1119", borderRadius:5, overflow:"hidden" }}>
+                              <div style={{ width:`${Math.max(5,pct)}%`, height:"100%", background:barColor, borderRadius:5, transition:"width .3s" }}/>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Performance Rankings */}
+                <div style={{ display:"flex", gap:14, marginTop:20, flexWrap:"wrap" }}>
+                  {/* Best Profit/Day */}
+                  {performanceAnalytics.byItem.filter(r => r.profitPerDay != null && r.profitPerDay > 0).length > 0 && (
+                    <div style={{ flex:"1 1 220px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14 }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>💎 RENDIMENTO ORO/GIORNO</div>
+                      {performanceAnalytics.byItem.filter(r => r.profitPerDay != null && r.profitPerDay > 0)
+                        .sort((a,b) => b.profitPerDay - a.profitPerDay).slice(0,5).map((r, i, arr) => (
+                        <div key={r.name} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none" }}>
+                          <span style={{ fontSize:12, color:C.gold, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{r.name}</span>
+                          <span style={{ fontSize:13, fontFamily:"monospace", fontWeight:700, color:C.green }}>{fmtG(Math.round(r.profitPerDay))}/g</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Worst ROI */}
+                  {performanceAnalytics.worstROI.length > 0 && (
+                    <div style={{ flex:"1 1 220px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14 }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>⚠️ PEGGIOR ROI%</div>
+                      {performanceAnalytics.worstROI.map((r, i) => (
+                        <div key={r.name} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:i<performanceAnalytics.worstROI.length-1?`1px solid ${C.border}`:"none" }}>
+                          <span style={{ fontSize:12, color:C.gold, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{r.name}</span>
+                          <span style={{ fontSize:13, fontFamily:"monospace", fontWeight:700, color:r.roiPct>=0?C.green:C.red }}>{r.roiPct.toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>)}
             </div>
           )}
 
@@ -1541,6 +1700,105 @@ export default function App() {
               <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
                 {magazzinoOverview.rows.length} slot · {magazzinoOverview.itemCount} item in magazzino
               </div>
+
+              {/* ── ANALYTICS SECTION ── */}
+              {performanceAnalytics.byItem.length > 0 && (<>
+
+                {/* Capital Distribution */}
+                {performanceAnalytics.capitalChart.length > 0 && (
+                  <div style={{ marginTop:24 }}>
+                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>💰 CAPITALE BLOCCATO PER ITEM</div>
+                    <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+                      <ResponsiveContainer width="100%" height={Math.max(200, performanceAnalytics.capitalChart.length * 36)}>
+                        <LineChart data={performanceAnalytics.capitalChart} layout="vertical" margin={{ left:100, right:20, top:5, bottom:5 }}>
+                          <CartesianGrid stroke="#272b3d" strokeDasharray="3 3"/>
+                          <XAxis type="number" tickFormatter={fmtG} stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }}/>
+                          <YAxis type="category" dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:11 }} width={95}/>
+                          <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={v => fmtG(v)}/>
+                          <Line type="monotone" dataKey="totale" stroke={C.gold} strokeWidth={2} dot={{ r:4, fill:C.gold }}/>
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {/* Staging Time per Item */}
+                {performanceAnalytics.byItem.some(r => r.avgStaging != null) && (
+                  <div style={{ marginTop:20 }}>
+                    <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO DI STAGING — ACQUISTO → BAZAR (giorni)</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                      <div style={{ display:"flex", padding:"4px 12px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
+                        <div style={{ width:150, flexShrink:0 }}>ITEM</div>
+                        <div style={{ width:70, textAlign:"right" }}>MEDIA</div>
+                        <div style={{ width:70, textAlign:"right" }}>MIN</div>
+                        <div style={{ width:70, textAlign:"right" }}>MAX</div>
+                        <div style={{ width:80, textAlign:"right" }}>CICLO TOT.</div>
+                        <div style={{ flex:1 }}/>
+                        <div style={{ width:120 }}>BARRA</div>
+                      </div>
+                      {performanceAnalytics.byItem.filter(r => r.avgStaging != null).sort((a,b) => b.avgStaging - a.avgStaging).map(r => {
+                        const maxBar = Math.max(...performanceAnalytics.byItem.filter(x => x.avgStaging != null).map(x => x.avgStaging))
+                        const pct = maxBar > 0 ? (r.avgStaging / maxBar) * 100 : 0
+                        const barColor = r.avgStaging >= 7 ? C.red : r.avgStaging >= 3 ? C.gold : C.green
+                        return (
+                          <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:10, background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
+                            <div style={{ width:150, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:13, fontFamily:"monospace", fontWeight:700, color:barColor }}>{r.avgStaging.toFixed(1)}g</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.green }}>{r.minStaging.toFixed(1)}g</div>
+                            <div style={{ width:70, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.red }}>{r.maxStaging.toFixed(1)}g</div>
+                            <div style={{ width:80, textAlign:"right", fontSize:12, fontFamily:"monospace", color:C.muted }}>{r.avgCycle != null ? r.avgCycle.toFixed(1) + "g" : "—"}</div>
+                            <div style={{ flex:1 }}/>
+                            <div style={{ width:120, height:10, background:"#0f1119", borderRadius:5, overflow:"hidden" }}>
+                              <div style={{ width:`${pct}%`, height:"100%", background:barColor, borderRadius:5, transition:"width .3s" }}/>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rankings Row */}
+                <div style={{ display:"flex", gap:14, marginTop:20, flexWrap:"wrap" }}>
+                  {/* Top ROI */}
+                  {performanceAnalytics.topROI.length > 0 && (
+                    <div style={{ flex:"1 1 220px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14 }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>🏆 MIGLIORE ROI%</div>
+                      {performanceAnalytics.topROI.map((r, i) => (
+                        <div key={r.name} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:i<performanceAnalytics.topROI.length-1?`1px solid ${C.border}`:"none" }}>
+                          <span style={{ fontSize:12, color:C.gold, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{r.name}</span>
+                          <span style={{ fontSize:13, fontFamily:"monospace", fontWeight:700, color:r.roiPct>=0?C.green:C.red }}>{r.roiPct.toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Fastest Sellers */}
+                  {performanceAnalytics.fastSellers.length > 0 && (
+                    <div style={{ flex:"1 1 220px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14 }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>⚡ VENDITA PIÙ VELOCE</div>
+                      {performanceAnalytics.fastSellers.map((r, i) => (
+                        <div key={r.name} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:i<performanceAnalytics.fastSellers.length-1?`1px solid ${C.border}`:"none" }}>
+                          <span style={{ fontSize:12, color:C.gold, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{r.name}</span>
+                          <span style={{ fontSize:13, fontFamily:"monospace", fontWeight:700, color:C.green }}>{r.avgSell < 1 ? "<1g" : r.avgSell.toFixed(1)+"g"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Slowest Sellers */}
+                  {performanceAnalytics.slowSellers.length > 0 && (
+                    <div style={{ flex:"1 1 220px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14 }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:10 }}>🐌 VENDITA PIÙ LENTA</div>
+                      {performanceAnalytics.slowSellers.map((r, i) => (
+                        <div key={r.name} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", borderBottom:i<performanceAnalytics.slowSellers.length-1?`1px solid ${C.border}`:"none" }}>
+                          <span style={{ fontSize:12, color:C.gold, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:140 }}>{r.name}</span>
+                          <span style={{ fontSize:13, fontFamily:"monospace", fontWeight:700, color:C.red }}>{r.avgSell.toFixed(1)}g</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </>)}
             </div>
           )}
 
