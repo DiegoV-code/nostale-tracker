@@ -205,7 +205,9 @@ export default function App() {
   // listing form (in vendita)
   const [lsQty,      setLsQty]      = useState("")
   const [lsPrice,    setLsPrice]    = useState("")
-  const [lsNote,     setLsNote]     = useState("")
+  const [lsTax,      setLsTax]      = useState("")
+  const [partialIdx, setPartialIdx] = useState(null)
+  const [partialQty, setPartialQty] = useState("")
 
   // new item form
   const [newName, setNewName] = useState("")
@@ -430,7 +432,7 @@ export default function App() {
     const totalProfit = sold.reduce((a,l) => {
       if (l.buyPrice == null) return a
       const qty = l.coveredQty || l.qty
-      return a + (l.listPrice - l.buyPrice) * qty
+      return a + (l.listPrice - l.buyPrice) * qty - (l.tax || 0)
     }, 0)
     const profitableSales = sold.filter(l => l.buyPrice != null)
     return { active, sold, activeQty, activeValue, avgMs, totalProfit, profitableSales }
@@ -452,10 +454,33 @@ export default function App() {
       const soldWithBuy  = (it.listings || []).filter(l => l.sold && l.buyPrice != null)
       inStock   += openLots.reduce((a,l) => a + l.qty * l.price, 0)
       atMarket  += activeList.reduce((a,l) => a + l.qty * l.listPrice, 0)
-      realized  += soldWithBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty), 0)
+      realized  += soldWithBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty) - (l.tax || 0), 0)
       totalItems++
     }
     return { inStock, atMarket, realized, totalItems }
+  }, [data])
+
+  /* ── BAZAR OVERVIEW — all active listings across items ── */
+  const bazarOverview = useMemo(() => {
+    if (!data) return { rows: [], totalQty: 0, totalValue: 0, totalTax: 0, totalProfit: 0 }
+    const rows = []
+    for (const name of Object.keys(data.items || {})) {
+      const it = data.items[name]
+      const lsList = it.listings || []
+      for (let i = 0; i < lsList.length; i++) {
+        const l = lsList[i]
+        if (l.sold) continue
+        const covered = l.coveredQty || 0
+        const profit = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
+        const daysActive = (Date.now() - new Date(l.listedAt)) / 86400000
+        rows.push({ name, idx: i, listing: l, covered, profit, daysActive })
+      }
+    }
+    const totalQty   = rows.reduce((a,r) => a + r.listing.qty, 0)
+    const totalValue = rows.reduce((a,r) => a + r.listing.qty * r.listing.listPrice, 0)
+    const totalTax   = rows.reduce((a,r) => a + (r.listing.tax || 0), 0)
+    const totalProfit = rows.reduce((a,r) => a + (r.profit || 0), 0)
+    return { rows, totalQty, totalValue, totalTax, totalProfit }
   }, [data])
 
   /* ── ANALISI ROWS ── */
@@ -480,9 +505,9 @@ export default function App() {
 
       const soldBuy    = lsList.filter(l => l.sold && l.buyPrice != null)
       const roiPct     = soldBuy.length
-        ? soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) / l.buyPrice, 0) / soldBuy.length * 100
+        ? soldBuy.reduce((a,l) => { const qty = l.coveredQty || l.qty; return a + ((l.listPrice - l.buyPrice) * qty - (l.tax || 0)) / (l.buyPrice * qty) }, 0) / soldBuy.length * 100
         : null
-      const totalProfit = soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty), 0)
+      const totalProfit = soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty) - (l.tax || 0), 0)
 
       const soldL      = lsList.filter(l => l.sold)
       const avgSellMs  = soldL.length
@@ -607,39 +632,98 @@ export default function App() {
   const addListing = () => {
     const qty   = parseInt(lsQty)
     const listP = parseG(lsPrice)
+    const tax   = lsTax.trim() ? parseG(lsTax) : 0
     if (!selItem || isNaN(qty) || qty <= 0 || isNaN(listP) || listP <= 0) return
     const match = matchLotsForQty(lots, qty)
-    const entry = { qty, listPrice: Math.round(listP), buyPrice: match.avgBuyPrice, coveredQty: match.coveredQty, totalCost: match.totalCost, lotLinks: match.links, listedAt: new Date().toISOString(), note: lsNote.trim(), sold: false, soldAt: null }
-    const it = { ...data.items[selItem], listings: [...listings, entry] }
-    upd({ ...data, items: { ...data.items, [selItem]: it } })
-    setLsQty(""); setLsPrice(""); setLsNote("")
-  }
-
-  const markListingSold = idx => {
-    const listing = listings[idx]
+    const entry = { qty, listPrice: Math.round(listP), buyPrice: match.avgBuyPrice, coveredQty: match.coveredQty, totalCost: match.totalCost, lotLinks: match.links, listedAt: new Date().toISOString(), tax: isNaN(tax) ? 0 : Math.round(tax), sold: false, soldAt: null, lotsConsumed: true }
+    // Consume lots from warehouse immediately (FIFO)
     const updatedLots = lots.map(l => ({ ...l }))
-    // Auto-consume linked lots from magazzino (FIFO)
-    if (listing.lotLinks) {
-      for (const link of listing.lotLinks) {
+    if (match.links) {
+      for (const link of match.links) {
         const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
         if (lotIdx !== -1) {
           if (link.qty >= updatedLots[lotIdx].qty) {
-            // Fully consumed — mark sold, keep original qty for history
             updatedLots[lotIdx].sold = true
           } else {
-            // Partially consumed — reduce qty
             updatedLots[lotIdx].qty -= link.qty
           }
         }
       }
     }
-    const updatedListings = listings.map((l,i) => i === idx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
-    const it = { ...data.items[selItem], lots: updatedLots, listings: updatedListings }
+    const it = { ...data.items[selItem], lots: updatedLots, listings: [...listings, entry] }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
+    setLsQty(""); setLsPrice(""); setLsTax("")
+  }
+
+  const markListingSold = (idx, soldQty) => {
+    const listing = listings[idx]
+    const isFullSale = !soldQty || soldQty >= listing.qty
+
+    if (isFullSale) {
+      // Full sale — mark entire listing as sold
+      const updatedLots = lots.map(l => ({ ...l }))
+      if (!listing.lotsConsumed && listing.lotLinks) {
+        for (const link of listing.lotLinks) {
+          const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
+          if (lotIdx !== -1) {
+            if (link.qty >= updatedLots[lotIdx].qty) updatedLots[lotIdx].sold = true
+            else updatedLots[lotIdx].qty -= link.qty
+          }
+        }
+      }
+      const updatedListings = listings.map((l,i) => i === idx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
+      const it = { ...data.items[selItem], lots: updatedLots, listings: updatedListings }
+      upd({ ...data, items: { ...data.items, [selItem]: it } })
+    } else {
+      // Partial sale — split listing into sold portion + remaining
+      const soldCovered = Math.min(soldQty, listing.coveredQty || 0)
+      const soldEntry = {
+        qty: soldQty, listPrice: listing.listPrice, buyPrice: listing.buyPrice,
+        coveredQty: soldCovered, totalCost: listing.buyPrice ? listing.buyPrice * soldCovered : 0,
+        lotLinks: null, listedAt: listing.listedAt, tax: 0,
+        sold: true, soldAt: new Date().toISOString(), lotsConsumed: false
+      }
+      // Reduce lotLinks on remaining listing (FIFO)
+      let newLinks = listing.lotLinks ? listing.lotLinks.map(lk => ({...lk})) : []
+      let rem = soldQty
+      for (let i = 0; i < newLinks.length && rem > 0; i++) {
+        const take = Math.min(newLinks[i].qty, rem)
+        newLinks[i].qty -= take
+        rem -= take
+      }
+      newLinks = newLinks.filter(lk => lk.qty > 0)
+      const remainingCovered = Math.max(0, (listing.coveredQty || 0) - soldQty)
+      const updatedListing = {
+        ...listing, qty: listing.qty - soldQty, coveredQty: remainingCovered,
+        lotLinks: newLinks, totalCost: newLinks.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0)
+      }
+      const updatedListings = [...listings]
+      updatedListings[idx] = updatedListing
+      updatedListings.push(soldEntry)
+      const it = { ...data.items[selItem], listings: updatedListings }
+      upd({ ...data, items: { ...data.items, [selItem]: it } })
+    }
+    setPartialIdx(null)
+    setPartialQty("")
   }
 
   const delListing = idx => {
-    const it = { ...data.items[selItem], listings: listings.filter((_,i) => i !== idx) }
+    const listing = listings[idx]
+    const updatedLots = lots.map(l => ({ ...l }))
+    // Restore lots to warehouse if listing was active and lots were consumed
+    if (listing.lotsConsumed && !listing.sold && listing.lotLinks) {
+      for (const link of listing.lotLinks) {
+        const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
+        if (lotIdx !== -1) {
+          if (updatedLots[lotIdx].sold) {
+            updatedLots[lotIdx].sold = false
+          } else {
+            updatedLots[lotIdx].qty += link.qty
+          }
+        }
+      }
+    }
+    const it = { ...data.items[selItem], lots: updatedLots, listings: listings.filter((_,i) => i !== idx) }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
   }
 
@@ -831,7 +915,7 @@ export default function App() {
 
           {/* top nav */}
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-            {[["dashboard","🏠"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
+            {[["dashboard","🏠"],["bazar","🏷️"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
               <div key={t} onClick={()=>setPage(t)} style={{ flex:1, textAlign:"center", padding:"10px 0", fontSize:15, cursor:"pointer", color:page===t?C.gold:C.muted, borderBottom:`2px solid ${page===t?C.gold:"transparent"}`, transition:"all .15s" }}>{l}</div>
             ))}
           </div>
@@ -1158,6 +1242,72 @@ export default function App() {
                 {analysisRows.length} item
               </div>
               </>)}
+            </div>
+          )}
+
+          {/* ── BAZAR PAGE ── */}
+          {page === "bazar" && (
+            <div className="up">
+              <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:16 }}>🏷️ BAZAR — LISTING ATTIVI</div>
+
+              {/* stat bar */}
+              {bazarOverview.rows.length > 0 && (
+                <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
+                  {[
+                    { l:"SLOT ATTIVE",     v:bazarOverview.rows.length + "",       c:C.gold  },
+                    { l:"PEZZI TOTALI",    v:bazarOverview.totalQty + " pz",       c:C.text  },
+                    { l:"VALORE AL BAZAR", v:fmtG(bazarOverview.totalValue),       c:C.gold  },
+                    { l:"TASSE TOTALI",    v:fmtG(bazarOverview.totalTax),         c:C.red   },
+                    { l:"PROFITTO ATTESO", v:fmtG(bazarOverview.totalProfit),      c:bazarOverview.totalProfit>=0?C.green:C.red },
+                  ].map(s => (
+                    <div key={s.l} style={{ flex:"1 1 100px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 13px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
+                      <div style={{ fontSize:17, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {bazarOverview.rows.length === 0 ? (
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:250, gap:12 }}>
+                  <span style={{ fontSize:48, opacity:.08 }}>🏷️</span>
+                  <span style={{ color:C.muted, letterSpacing:3, fontSize:12 }}>NESSUN LISTING ATTIVO</span>
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                  {/* header */}
+                  <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
+                    <div style={{ width:160, flexShrink:0 }}>ITEM</div>
+                    <div style={{ width:55, flexShrink:0, textAlign:"right" }}>QTÀ</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>TOTALE</div>
+                    <div style={{ width:80, flexShrink:0, textAlign:"right" }}>TASSE</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PROFITTO</div>
+                    <div style={{ width:90, flexShrink:0, textAlign:"right" }}>DA</div>
+                  </div>
+                  {bazarOverview.rows.map((r, ri) => (
+                    <div key={ri} className="r"
+                      onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("vendite") }}
+                      style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, cursor:"pointer" }}>
+                      <div style={{ width:160, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                      <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.listing.qty}</div>
+                      <div style={{ width:100, flexShrink:0, fontSize:14, color:C.gold, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice)}</div>
+                      <div style={{ width:100, flexShrink:0, fontSize:13, color:C.muted, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice * r.listing.qty)}</div>
+                      <div style={{ width:80, flexShrink:0, fontSize:12, color:r.listing.tax > 0 ? C.red : C.muted, fontFamily:"monospace", textAlign:"right" }}>{r.listing.tax > 0 ? fmtG(r.listing.tax) : "—"}</div>
+                      <div style={{ width:100, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.profit!=null?(r.profit>=0?C.green:C.red):C.muted }}>
+                        {r.profit != null ? `${r.profit>=0?"▲":"▼"} ${fmtG(Math.abs(r.profit))}` : "—"}
+                      </div>
+                      <div style={{ width:90, flexShrink:0, fontSize:12, textAlign:"right", color:r.daysActive>=3?C.red:r.daysActive>=1?C.gold:C.green }}>
+                        {r.daysActive < 1 ? "oggi" : `${Math.floor(r.daysActive)}g fa`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
+                {bazarOverview.rows.length} listing attivi
+              </div>
             </div>
           )}
 
@@ -1574,9 +1724,12 @@ export default function App() {
                           <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>{fmtG(parseG(lsPrice))}</div>
                         )}
                       </div>
-                      <div style={{ flex:"1 1 140px" }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>NOTA</div>
-                        <input value={lsNote} onChange={e=>setLsNote(e.target.value)} placeholder="es. slot 3 bazar..." style={inp()}/>
+                      <div style={{ flex:"0 0 130px" }}>
+                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>TASSE BAZAR</div>
+                        <input value={lsTax} onChange={e=>setLsTax(e.target.value)} placeholder="es. 50k" style={inp({ color:C.red })}/>
+                        {lsTax && !isNaN(parseG(lsTax)) && (
+                          <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>{fmtG(parseG(lsTax))}</div>
+                        )}
                       </div>
                       <button onClick={addListing} disabled={!lsQty||!lsPrice||isNaN(parseG(lsPrice))}
                         style={{ ...pill(!!(lsQty&&lsPrice&&!isNaN(parseG(lsPrice))),C.gold), padding:"8px 18px", flexShrink:0 }}>
@@ -1607,10 +1760,11 @@ export default function App() {
                         </div>
                         {lsPrice && !isNaN(parseG(lsPrice)) && lotPreview.avgBuyPrice && (() => {
                           const sellP = parseG(lsPrice)
-                          const profit = (sellP - lotPreview.avgBuyPrice) * lotPreview.coveredQty
+                          const taxVal = lsTax && !isNaN(parseG(lsTax)) ? parseG(lsTax) : 0
+                          const profit = (sellP - lotPreview.avgBuyPrice) * lotPreview.coveredQty - taxVal
                           return (
                             <div style={{ marginTop:6, fontSize:13, fontWeight:700, fontFamily:"monospace", color:profit>=0?C.green:C.red }}>
-                              {profit>=0?"▲":"▼"} {fmtG(Math.abs(profit))} profitto stimato sulla slot
+                              {profit>=0?"▲":"▼"} {fmtG(Math.abs(profit))} profitto stimato{taxVal > 0 ? " (tasse incluse)" : ""}
                             </div>
                           )
                         })()}
@@ -1632,7 +1786,7 @@ export default function App() {
                         if (l.sold) return null
                         const daysActive = ((Date.now() - new Date(l.listedAt)) / 86400000)
                         const covered = l.coveredQty || 0
-                        const profitOnCovered = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered : null
+                        const profitOnCovered = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
                         return (
                           <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, flexWrap:"wrap" }}>
                             <div style={{ display:"flex", flexDirection:"column", minWidth:118, flexShrink:0 }}>
@@ -1658,9 +1812,22 @@ export default function App() {
                             {covered < l.qty && covered > 0 && (
                               <span style={{ fontSize:11, color:C.red }}>⚠ {l.qty - covered} non coperti</span>
                             )}
-                            <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
-                            <button onClick={()=>markListingSold(i)}
-                              style={{ ...pill(false, C.green, { padding:"5px 14px", fontSize:12 }), flexShrink:0 }}>✓ VENDUTO</button>
+                            {l.tax > 0 && <span style={{ fontSize:11, color:C.red, flexShrink:0 }}>tasse: {fmtG(l.tax)}</span>}
+                            <div style={{ flex:1 }}/>
+                            {partialIdx === i ? (
+                              <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+                                <input type="number" min="1" max={l.qty} value={partialQty} onChange={e=>setPartialQty(e.target.value)}
+                                  onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty); if(q>0&&q<=l.qty) markListingSold(i,q) } }}
+                                  autoFocus placeholder="qtà" style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
+                                <button onClick={()=>{ const q=parseInt(partialQty); if(q>0&&q<=l.qty) markListingSold(i,q) }}
+                                  disabled={!partialQty||isNaN(parseInt(partialQty))||parseInt(partialQty)<=0||parseInt(partialQty)>l.qty}
+                                  style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty))&&parseInt(partialQty)>0&&parseInt(partialQty)<=l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>✓</button>
+                                <button onClick={()=>{setPartialIdx(null);setPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
+                              </div>
+                            ) : (
+                              <button onClick={()=>{setPartialIdx(i);setPartialQty(String(l.qty))}}
+                                style={{ ...pill(false, C.green, { padding:"5px 14px", fontSize:12 }), flexShrink:0 }}>✓ VENDUTO</button>
+                            )}
                             <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:14, flexShrink:0 }}>✕</button>
                           </div>
                         )
@@ -1676,7 +1843,7 @@ export default function App() {
                           const timeToSell   = fmtSellTime(l.listedAt, l.soldAt)
                           const msToSell     = new Date(l.soldAt) - new Date(l.listedAt)
                           const covered      = l.coveredQty || 0
-                          const profitTotal  = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered : null
+                          const profitTotal  = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
                           return (
                             <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 14px", gap:10, flexWrap:"wrap" }}>
                               <span style={{ fontSize:11, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(l.listedAt)}</span>
@@ -1697,7 +1864,8 @@ export default function App() {
                                   [{l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}]
                                 </span>
                               )}
-                              <span style={{ fontSize:11, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
+                              {l.tax > 0 && <span style={{ fontSize:11, color:C.red, flexShrink:0 }}>tasse: {fmtG(l.tax)}</span>}
+                              <div style={{ flex:1 }}/>
                               <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:14 }}>✕</button>
                             </div>
                           )
