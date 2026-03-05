@@ -501,34 +501,34 @@ export default function App() {
   const magazzinoOverview = useMemo(() => {
     if (!data) return { rows: [], totalQty: 0, totalSpent: 0, totalEstValue: 0, totalEstProfit: 0, itemCount: 0, avgAgeDays: 0 }
     const rows = []
+    const itemSet = new Set()
     for (const name of Object.keys(data.items || {})) {
       const it = data.items[name]
       const lots = it.lots || []
       const ps = it.prices || []
       const lastPrice = ps.length ? ps[ps.length - 1].price : null
-      const openLots = lots.filter(l => !l.sold)
-      if (!openLots.length) continue
-      const totalQty = openLots.reduce((a, l) => a + l.qty, 0)
-      const totalCost = openLots.reduce((a, l) => a + l.qty * l.price, 0)
-      const avgBuy = totalQty ? Math.round(totalCost / totalQty) : 0
-      const estValue = lastPrice != null ? totalQty * lastPrice : null
-      const estProfit = estValue != null ? estValue - totalCost : null
-      // Aging: earliest open lot timestamp
-      const oldestTs = Math.min(...openLots.map(l => new Date(l.timestamp).getTime()))
-      const ageDays = (Date.now() - oldestTs) / 86400000
-      // Skip items that have active listings (they are at Bazar, not in Magazzino)
+      // Skip items that have active listings (they are at Bazar)
       const activeListings = (it.listings || []).filter(l => !l.sold)
       if (activeListings.length > 0) continue
       // Average price (all real prices)
       const realPrices = ps.filter(p => !p.esaurito).map(p => p.price)
       const avgPrice = realPrices.length ? Math.round(realPrices.reduce((a, b) => a + b, 0) / realPrices.length) : null
-      rows.push({ name, openLots, totalQty, totalCost, avgBuy, lastPrice, estValue, estProfit, ageDays, avgPrice })
+      // One row per open lot
+      for (const lot of lots) {
+        if (lot.sold) continue
+        const lotCost = lot.qty * lot.price
+        const estValue = lastPrice != null ? lot.qty * lastPrice : null
+        const estProfit = estValue != null ? estValue - lotCost : null
+        const ageDays = (Date.now() - new Date(lot.timestamp).getTime()) / 86400000
+        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, lastPrice, estValue, estProfit, ageDays, avgPrice, note: lot.note })
+        itemSet.add(name)
+      }
     }
-    const totalQty = rows.reduce((a, r) => a + r.totalQty, 0)
-    const totalSpent = rows.reduce((a, r) => a + r.totalCost, 0)
+    const totalQty = rows.reduce((a, r) => a + r.qty, 0)
+    const totalSpent = rows.reduce((a, r) => a + r.lotCost, 0)
     const totalEstValue = rows.reduce((a, r) => a + (r.estValue || 0), 0)
     const totalEstProfit = rows.reduce((a, r) => a + (r.estProfit || 0), 0)
-    const itemCount = rows.length
+    const itemCount = itemSet.size
     const avgAgeDays = rows.length ? rows.reduce((a, r) => a + r.ageDays, 0) / rows.length : 0
     return { rows, totalQty, totalSpent, totalEstValue, totalEstProfit, itemCount, avgAgeDays }
   }, [data])
@@ -1475,7 +1475,7 @@ export default function App() {
               {magazzinoOverview.rows.length > 0 && (
                 <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
                   {[
-                    { l:"ITEM IN STOCK",     v:magazzinoOverview.itemCount + "",              c:C.blue  },
+                    { l:"ITEM IN STOCK",     v:magazzinoOverview.itemCount + " item / " + magazzinoOverview.rows.length + " slot", c:C.blue },
                     { l:"PEZZI TOTALI",      v:magazzinoOverview.totalQty + " pz",            c:C.text  },
                     { l:"INVESTITO",         v:fmtG(magazzinoOverview.totalSpent),             c:C.red   },
                     { l:"VALORE STIMATO",    v:fmtG(magazzinoOverview.totalEstValue),          c:C.gold  },
@@ -1499,14 +1499,14 @@ export default function App() {
                 <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
                   {/* header */}
                   <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
-                    <div style={{ width:160, flexShrink:0 }}>ITEM</div>
+                    <div style={{ width:150, flexShrink:0 }}>ITEM</div>
                     <div style={{ width:55, flexShrink:0, textAlign:"right" }}>QTÀ</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO ACQ.</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>INVESTITO</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO ATT.</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PROFITTO ST.</div>
-                    <div style={{ width:80, flexShrink:0, textAlign:"right" }}>MEDIA</div>
-                    <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ETÀ STOCK</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PREZZO ACQ.</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>COSTO SLOT</div>
+                    <div style={{ width:85, flexShrink:0, textAlign:"right" }}>MEDIA</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PROFITTO ST.</div>
+                    <div style={{ width:75, flexShrink:0, textAlign:"right" }}>ETÀ</div>
+                    <div style={{ flex:1, textAlign:"right" }}>DATA</div>
                   </div>
                   {[...magazzinoOverview.rows].sort((a,b) => b.ageDays - a.ageDays).map((r, ri) => {
                     const ageColor = r.ageDays >= 7 ? C.red : r.ageDays >= 3 ? C.gold : C.green
@@ -1515,19 +1515,19 @@ export default function App() {
                       <div key={ri} className="r"
                         onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("magazzino") }}
                         style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, cursor:"pointer" }}>
-                        <div style={{ width:160, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
-                        <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.totalQty}</div>
-                        <div style={{ width:100, flexShrink:0, fontSize:13, color:C.text, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.avgBuy)}</div>
-                        <div style={{ width:100, flexShrink:0, fontSize:13, color:C.red, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.totalCost)}</div>
-                        <div style={{ width:100, flexShrink:0, fontSize:13, color:C.gold, fontFamily:"monospace", textAlign:"right" }}>{r.lastPrice != null ? fmtG(r.lastPrice) : "—"}</div>
-                        <div style={{ width:100, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.estProfit!=null?(r.estProfit>=0?C.green:C.red):C.muted }}>
+                        <div style={{ width:150, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                        <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.qty}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:13, color:C.text, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.price)}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:13, color:C.red, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.lotCost)}</div>
+                        <div style={{ width:85, flexShrink:0, fontSize:13, fontFamily:"monospace", textAlign:"right", color:C.muted }}>{r.avgPrice != null ? fmtG(r.avgPrice) : "—"}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.estProfit!=null?(r.estProfit>=0?C.green:C.red):C.muted }}>
                           {r.estProfit != null ? `${r.estProfit>=0?"▲":"▼"} ${fmtG(Math.abs(r.estProfit))}` : "—"}
                         </div>
-                        <div style={{ width:80, flexShrink:0, fontSize:13, fontFamily:"monospace", textAlign:"right", color:C.text }}>
-                          {r.avgPrice != null ? fmtG(r.avgPrice) : "—"}
-                        </div>
-                        <div style={{ width:80, flexShrink:0, fontSize:13, fontWeight:700, textAlign:"right", color:ageColor }}>
+                        <div style={{ width:75, flexShrink:0, fontSize:13, fontWeight:700, textAlign:"right", color:ageColor }}>
                           {ageLabel}
+                        </div>
+                        <div style={{ flex:1, fontSize:11, color:C.muted, textAlign:"right" }}>
+                          {fmtFull(r.lot.timestamp)}
                         </div>
                       </div>
                     )
@@ -1536,7 +1536,7 @@ export default function App() {
               )}
 
               <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
-                {magazzinoOverview.rows.length} item in magazzino
+                {magazzinoOverview.rows.length} slot · {magazzinoOverview.itemCount} item in magazzino
               </div>
             </div>
           )}
