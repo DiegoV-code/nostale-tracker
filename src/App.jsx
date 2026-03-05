@@ -507,9 +507,6 @@ export default function App() {
       const lots = it.lots || []
       const ps = it.prices || []
       const lastPrice = ps.length ? ps[ps.length - 1].price : null
-      // Skip items that have active listings (they are at Bazar)
-      const activeListings = (it.listings || []).filter(l => !l.sold)
-      if (activeListings.length > 0) continue
       // Average price (all real prices)
       const realPrices = ps.filter(p => !p.esaurito).map(p => p.price)
       const avgPrice = realPrices.length ? Math.round(realPrices.reduce((a, b) => a + b, 0) / realPrices.length) : null
