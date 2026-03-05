@@ -1432,10 +1432,12 @@ export default function App() {
                         </div>
                         <div style={{ flex:1, display:"flex", justifyContent:"flex-end", alignItems:"center", gap:5 }} onClick={e => e.stopPropagation()}>
                           {isPartial ? (
-                            <>
-                              <input type="number" min="1" max={r.listing.qty} value={bazarPartialQty} onChange={e=>setBazarPartialQty(e.target.value)}
-                                onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(bazarPartialQty); if(q>0&&q<=r.listing.qty) markBazarListingSold(r.name,r.idx,q) } if(e.key==="Escape"){setBazarPartialKey(null);setBazarPartialQty("")} }}
-                                autoFocus placeholder="qtà" style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
+                            <div style={{ display:"flex", alignItems:"center", gap:6, background:"#0f1119", border:`1px solid ${C.border2}`, borderRadius:8, padding:"5px 10px" }}>
+                              <span style={{ fontSize:11, color:C.muted }}>Venduti:</span>
+                              <input type="number" min="1" max={r.listing.qty-1} value={bazarPartialQty} onChange={e=>setBazarPartialQty(e.target.value)}
+                                onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(bazarPartialQty); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.idx,q) } if(e.key==="Escape"){setBazarPartialKey(null);setBazarPartialQty("")} }}
+                                autoFocus style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
+                              <span style={{ fontSize:11, color:C.muted }}>/ {r.listing.qty}</span>
                               {bazarPartialQty && !isNaN(parseInt(bazarPartialQty)) && parseInt(bazarPartialQty) > 0 && parseInt(bazarPartialQty) < r.listing.qty && r.listing.buyPrice != null && (() => {
                                 const sq = parseInt(bazarPartialQty)
                                 const pTax = r.listing.tax ? Math.round(r.listing.tax * sq / r.listing.qty) : 0
@@ -1444,14 +1446,18 @@ export default function App() {
                                   {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))}
                                 </span>
                               })()}
-                              <button onClick={()=>{ const q=parseInt(bazarPartialQty); if(q>0&&q<=r.listing.qty) markBazarListingSold(r.name,r.idx,q) }}
-                                disabled={!bazarPartialQty||isNaN(parseInt(bazarPartialQty))||parseInt(bazarPartialQty)<=0||parseInt(bazarPartialQty)>r.listing.qty}
-                                style={{ ...pill(!!(bazarPartialQty&&!isNaN(parseInt(bazarPartialQty))&&parseInt(bazarPartialQty)>0&&parseInt(bazarPartialQty)<=r.listing.qty), C.green, { padding:"4px 8px", fontSize:11 }) }}>✓</button>
+                              <button onClick={()=>{ const q=parseInt(bazarPartialQty); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.idx,q) }}
+                                disabled={!bazarPartialQty||isNaN(parseInt(bazarPartialQty))||parseInt(bazarPartialQty)<=0||parseInt(bazarPartialQty)>=r.listing.qty}
+                                style={{ ...pill(!!(bazarPartialQty&&!isNaN(parseInt(bazarPartialQty))&&parseInt(bazarPartialQty)>0&&parseInt(bazarPartialQty)<r.listing.qty), C.green, { padding:"4px 8px", fontSize:11 }) }}>CONFERMA</button>
                               <button onClick={()=>{setBazarPartialKey(null);setBazarPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
-                            </>
+                            </div>
                           ) : (
-                            <button onClick={()=>{setBazarPartialKey(bKey);setBazarPartialQty(String(r.listing.qty))}}
-                              style={{ ...pill(false, C.green, { padding:"4px 10px", fontSize:11 }) }}>✓ VENDUTO</button>
+                            <div style={{ display:"flex", gap:4 }}>
+                              <button onClick={()=>markBazarListingSold(r.name,r.idx)} title="Venduto tutto"
+                                style={{ ...pill(false, C.green, { padding:"4px 10px", fontSize:11 }) }}>✓ TUTTO</button>
+                              {r.listing.qty > 1 && <button onClick={()=>{setBazarPartialKey(bKey);setBazarPartialQty("")}} title="Vendita parziale"
+                                style={{ ...pill(false, C.blue, { padding:"4px 8px", fontSize:11 }) }}>½</button>}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -2201,26 +2207,32 @@ export default function App() {
                             {l.tax > 0 && <span style={{ fontSize:11, color:C.red, flexShrink:0 }}>tasse: {fmtG(l.tax)}</span>}
                             <div style={{ flex:1 }}/>
                             {partialIdx === i ? (
-                              <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-                                <input type="number" min="1" max={l.qty} value={partialQty} onChange={e=>setPartialQty(e.target.value)}
-                                  onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty); if(q>0&&q<=l.qty) markListingSold(i,q) } }}
-                                  autoFocus placeholder="qtà" style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
+                              <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, background:"#0f1119", border:`1px solid ${C.border2}`, borderRadius:8, padding:"6px 10px" }}>
+                                <span style={{ fontSize:11, color:C.muted }}>Venduti:</span>
+                                <input type="number" min="1" max={l.qty-1} value={partialQty} onChange={e=>setPartialQty(e.target.value)}
+                                  onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty); if(q>0&&q<l.qty) markListingSold(i,q) } if(e.key==="Escape"){setPartialIdx(null);setPartialQty("")} }}
+                                  autoFocus style={{ ...inp({ width:65, padding:"4px 8px", fontSize:13, textAlign:"center" }) }}/>
+                                <span style={{ fontSize:11, color:C.muted }}>/ {l.qty}</span>
                                 {partialQty && !isNaN(parseInt(partialQty)) && parseInt(partialQty) > 0 && parseInt(partialQty) < l.qty && l.buyPrice != null && (() => {
                                   const sq = parseInt(partialQty)
                                   const pTax = l.tax ? Math.round(l.tax * sq / l.qty) : 0
                                   const pProfit = (l.listPrice - l.buyPrice) * Math.min(sq, l.coveredQty || 0) - pTax
                                   return <span style={{ fontSize:11, color:pProfit>=0?C.green:C.red, fontFamily:"monospace", fontWeight:700, whiteSpace:"nowrap" }}>
-                                    {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))} ({sq}pz, tasse {fmtG(pTax)})
+                                    {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))}
                                   </span>
                                 })()}
-                                <button onClick={()=>{ const q=parseInt(partialQty); if(q>0&&q<=l.qty) markListingSold(i,q) }}
-                                  disabled={!partialQty||isNaN(parseInt(partialQty))||parseInt(partialQty)<=0||parseInt(partialQty)>l.qty}
-                                  style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty))&&parseInt(partialQty)>0&&parseInt(partialQty)<=l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>✓</button>
+                                <button onClick={()=>{ const q=parseInt(partialQty); if(q>0&&q<l.qty) markListingSold(i,q) }}
+                                  disabled={!partialQty||isNaN(parseInt(partialQty))||parseInt(partialQty)<=0||parseInt(partialQty)>=l.qty}
+                                  style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty))&&parseInt(partialQty)>0&&parseInt(partialQty)<l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>CONFERMA</button>
                                 <button onClick={()=>{setPartialIdx(null);setPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
                               </div>
                             ) : (
-                              <button onClick={()=>{setPartialIdx(i);setPartialQty(String(l.qty))}}
-                                style={{ ...pill(false, C.green, { padding:"5px 14px", fontSize:12 }), flexShrink:0 }}>✓ VENDUTO</button>
+                              <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                                <button onClick={()=>markListingSold(i)} title="Venduto tutto"
+                                  style={{ ...pill(false, C.green, { padding:"5px 12px", fontSize:12 }) }}>✓ TUTTO</button>
+                                {l.qty > 1 && <button onClick={()=>{setPartialIdx(i);setPartialQty("")}} title="Vendita parziale"
+                                  style={{ ...pill(false, C.blue, { padding:"5px 10px", fontSize:12 }) }}>½</button>}
+                              </div>
                             )}
                             <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:14, flexShrink:0 }}>✕</button>
                           </div>
