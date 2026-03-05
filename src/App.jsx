@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceLine, Legend
 } from "recharts"
 
@@ -1709,14 +1709,16 @@ export default function App() {
                   <div style={{ marginTop:24 }}>
                     <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>💰 CAPITALE BLOCCATO PER ITEM</div>
                     <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
-                      <ResponsiveContainer width="100%" height={Math.max(200, performanceAnalytics.capitalChart.length * 36)}>
-                        <LineChart data={performanceAnalytics.capitalChart} layout="vertical" margin={{ left:100, right:20, top:5, bottom:5 }}>
-                          <CartesianGrid stroke="#272b3d" strokeDasharray="3 3"/>
-                          <XAxis type="number" tickFormatter={fmtG} stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }}/>
-                          <YAxis type="category" dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:11 }} width={95}/>
-                          <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={v => fmtG(v)}/>
-                          <Line type="monotone" dataKey="totale" stroke={C.gold} strokeWidth={2} dot={{ r:4, fill:C.gold }}/>
-                        </LineChart>
+                      <ResponsiveContainer width="100%" height={Math.max(250, performanceAnalytics.capitalChart.length * 40)}>
+                        <BarChart data={performanceAnalytics.capitalChart} margin={{ left:10, right:20, top:5, bottom:5 }}>
+                          <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
+                          <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:11 }} interval={0} angle={-35} textAnchor="end" height={60}/>
+                          <YAxis tickFormatter={fmtG} stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }}/>
+                          <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={v => fmtG(v)} labelStyle={{ color:C.gold, fontWeight:700 }}/>
+                          <Bar dataKey="magazzino" stackId="cap" fill="#60a5fa" name="Magazzino" radius={[0,0,0,0]}/>
+                          <Bar dataKey="bazar" stackId="cap" fill={C.gold} name="Bazar" radius={[4,4,0,0]}/>
+                          <Legend formatter={v => <span style={{ color:C.muted, fontSize:11 }}>{v}</span>}/>
+                        </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
