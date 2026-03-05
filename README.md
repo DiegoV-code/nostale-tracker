@@ -6,31 +6,34 @@ Tracker di mercato per NosTale. Monitora prezzi, gestisci magazzino e vendite al
 ![Electron](https://img.shields.io/badge/Electron-31-47848F)
 ![License](https://img.shields.io/badge/license-Private-red)
 
-## Funzionalita
+## Funzionalita'
 
 - **Tracking prezzi** — Registra i prezzi di mercato con supporto eventi e note
 - **Segnali di trading** — Analisi automatica: FORTE COMPRA / COMPRA / NELLA NORMA / SOPRA MEDIA / TROPPO CARO / VENDI
-- **Magazzino** — Gestisci acquisti con ROI e profitto stimato
-- **Bazar (In Vendita)** — Traccia listing con tempo di vendita e margini
+- **Magazzino** — Gestisci acquisti con ROI e profitto stimato, sincronizzato con il Bazar
+- **Bazar (In Vendita)** — Traccia listing con vendita parziale, tasse di esposizione e margini
+- **Pagina Bazar** — Panoramica globale di tutti i listing attivi su tutti gli item
 - **Grafici** — Andamento intraday e multi-giorno con Recharts
-- **Pagina Analisi** — Tabella ordinabile con segnale, ROI%, tempo vendita, profitto
+- **Pagina Analisi** — Tabella ordinabile con segnale, ROI%, tempo vendita, profitto, trend, volatilita'
+- **Nos Dollari (N$)** — Calcolatore profittabilita' item NosMall con sconti evento a %
 - **Capital Overview** — Dashboard con investito, al bazar, profitti realizzati
 - **Target personali** — Imposta prezzo di acquisto/vendita ideale per ogni item
-- **Quick-add** — Inserimento rapido prezzi con Ctrl+Q
-- **Categorie** — Organizza gli item per categoria, modificabile in qualsiasi momento
+- **Quick-add** — Inserimento rapido prezzi con Ctrl+Q e auto-avanzamento
+- **Categorie** — Organizza gli item per categoria (incluso Item Shop ND)
+- **Tasse Bazar** — Tracking tasse di esposizione incluse nei calcoli profitto
 - **Protezione anomalie** — Avviso se il prezzo inserito devia troppo dalla media
 - **Auto-update** — Aggiornamento automatico da GitHub Releases
 - **Export CSV** — Esporta lo storico prezzi
 
-## Screenshot
+## Manuale d'uso
 
-> *TODO: aggiungere screenshot*
+Consulta il [**MANUALE.md**](MANUALE.md) per la guida completa all'utilizzo dell'applicazione.
 
 ## Installazione
 
 Scarica l'ultimo installer dalla pagina [Releases](https://github.com/DiegoV-code/nostale-tracker/releases).
 
-Esegui `Nostale Tracker Setup X.X.X.exe` e segui le istruzioni.
+Esegui `Nostale Tracker Setup X.X.X.exe` e segui le istruzioni. L'app si aggiorna automaticamente.
 
 ## Sviluppo
 
@@ -38,7 +41,7 @@ Esegui `Nostale Tracker Setup X.X.X.exe` e segui le istruzioni.
 # Installa dipendenze
 npm install
 
-# Avvia in modalita sviluppo
+# Avvia in modalita' sviluppo
 npm run dev
 
 # Build frontend
@@ -51,14 +54,16 @@ npm run dist
 ## Struttura progetto
 
 ```
-├── electron/
-│   ├── main.js          # Processo principale Electron
-│   └── preload.js       # Bridge IPC sicuro
-├── src/
-│   └── App.jsx          # App React (single-file)
-├── public/
-│   └── icon.ico         # Icona applicazione
-└── package.json         # Config, build, publish
+electron/
+  main.js          # Processo principale Electron
+  preload.js       # Bridge IPC sicuro
+src/
+  App.jsx          # App React (single-file)
+  main.jsx         # Entry point React
+public/
+  icon.ico         # Icona applicazione
+.github/workflows/
+  release.yml      # CI/CD release workflow
 ```
 
 ## Dati
