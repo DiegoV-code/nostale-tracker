@@ -1010,21 +1010,26 @@ export default function App() {
 
         <button onClick={openQuick} title="Quick-add prezzi (Ctrl+Q)"
           style={{ background:showQuick?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${showQuick?C.gold:"#e8a83855"}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 12px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
-          ⚡ QUICK
+          ⚡ Prezzo Rapido
         </button>
 
-        <button onClick={()=>setPage("magazzino")} title="Magazzino globale"
+        <button onClick={()=>setPage("bazar")} title="Listing attivi al bazar"
+          style={{ background:page==="bazar"?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${page==="bazar"?C.gold:"#e8a83855"}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
+          🏷️ Bazar
+        </button>
+
+        <button onClick={()=>setPage("magazzino")} title="Magazzino globale — stock e aging"
           style={{ background:page==="magazzino"?"rgba(96,165,250,.18)":"rgba(96,165,250,.08)", border:`1px solid ${page==="magazzino"?"#60a5fa":"#60a5fa55"}`, borderRadius:7, color:"#60a5fa", cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
-          📦 MAG
+          📦 Magazzino
         </button>
 
-        <button onClick={()=>setPage("nd")} title="Nos Dollari"
+        <button onClick={()=>setPage("nd")} title="Calcolo costo Nos Dollari in gold"
           style={{ background:page==="nd"?"rgba(168,85,247,.18)":"rgba(168,85,247,.08)", border:`1px solid ${page==="nd"?"#a855f7":"#a855f755"}`, borderRadius:7, color:"#a855f7", cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="10" cy="10" r="9" fill="#a855f7" stroke="#c084fc" strokeWidth="1.5"/>
             <text x="10" y="14.5" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#fff" fontFamily="monospace">$</text>
           </svg>
-          N$
+          Nos Dollari
         </button>
 
         <div style={{ fontSize:11, color:saveCol, letterSpacing:1, minWidth:90, textAlign:"right", WebkitAppRegion:"no-drag" }}>
@@ -1058,7 +1063,7 @@ export default function App() {
 
           {/* top nav */}
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-            {[["dashboard","🏠"],["bazar","🏷️"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
+            {[["dashboard","🏠"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
               <div key={t} onClick={()=>setPage(t)} style={{ flex:1, textAlign:"center", padding:"10px 0", fontSize:15, cursor:"pointer", color:page===t?C.gold:C.muted, borderBottom:`2px solid ${page===t?C.gold:"transparent"}`, transition:"all .15s" }}>{l}</div>
             ))}
           </div>
