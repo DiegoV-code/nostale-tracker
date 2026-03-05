@@ -1,6 +1,6 @@
 {
   "name": "nostale-tracker",
-  "version": "4.4.2",
+  "version": "4.5.3",
   "description": "Nostale Market Price Tracker",
   "main": "electron/main.js",
   "scripts": {
