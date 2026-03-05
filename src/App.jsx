@@ -977,6 +977,11 @@ export default function App() {
         <span style={{ color:C.gold, fontWeight:700, letterSpacing:2, fontSize:17 }}>NOSTALE TRACKER</span>
         <span style={{ color:C.muted, fontSize:12, letterSpacing:1 }}>v{appVersion}</span>
 
+        <button onClick={()=>setPage("analisi")} title="Analisi comparativa item"
+          style={{ background:page==="analisi"?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${page==="analisi"?C.gold:"#e8a83855"}`, borderRadius:7, color:page==="analisi"?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
+          📊 Analisi
+        </button>
+
         {updateStatus === "downloaded" && (
           <button onClick={() => window.api.flushAndInstallUpdate(data)} style={{ background:"rgba(76,175,80,.15)", border:"1px solid #4caf50", borderRadius:7, color:"#4caf50", cursor:"pointer", padding:"4px 12px", fontSize:11, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", animation:"pulse 2s infinite" }}>
             🔄 Aggiorna ora
@@ -1063,7 +1068,7 @@ export default function App() {
 
           {/* top nav */}
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-            {[["dashboard","🏠"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
+            {[["dashboard","🏠"],["new","＋"]].map(([t,l]) => (
               <div key={t} onClick={()=>setPage(t)} style={{ flex:1, textAlign:"center", padding:"10px 0", fontSize:15, cursor:"pointer", color:page===t?C.gold:C.muted, borderBottom:`2px solid ${page===t?C.gold:"transparent"}`, transition:"all .15s" }}>{l}</div>
             ))}
           </div>
