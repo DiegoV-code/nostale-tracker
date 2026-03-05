@@ -1,0 +1,96 @@
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron')
+const { autoUpdater } = require('electron-updater')
+const path = require('path')
+const fs   = require('fs')
+
+const isDev = !app.isPackaged
+
+function getDataDir() {
+  return isDev
+    ? path.join(__dirname, '..', 'dist-electron', 'win-unpacked', 'NostaleData')
+    : path.join(path.dirname(app.getPath('exe')), 'NostaleData')
+}
+
+function ensureDir() {
+  const d = getDataDir()
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
+  return d
+}
+
+ipcMain.handle('load-data', () => {
+  try {
+    ensureDir()
+    const f = path.join(getDataDir(), 'data.json')
+    if (!fs.existsSync(f)) return null
+    return JSON.parse(fs.readFileSync(f, 'utf-8'))
+  } catch { return null }
+})
+
+ipcMain.handle('save-data', (_, data) => {
+  try {
+    const dir = ensureDir()
+    const f   = path.join(dir, 'data.json')
+    if (fs.existsSync(f)) fs.copyFileSync(f, path.join(dir, 'data.backup.json'))
+    fs.writeFileSync(f, JSON.stringify(data, null, 2), 'utf-8')
+    return { ok: true }
+  } catch (e) { return { ok: false, error: e.message } }
+})
+
+ipcMain.handle('get-data-path', () => getDataDir())
+
+ipcMain.handle('export-csv', (_, { name, entries }) => {
+  try {
+    const res = dialog.showSaveDialogSync({
+      title: 'Esporta CSV',
+      defaultPath: `${name}_prezzi.csv`,
+      filters: [{ name: 'CSV', extensions: ['csv'] }]
+    })
+    if (!res) return { ok: false }
+    const rows = entries.map(e => {
+      const d = new Date(e.timestamp)
+      return `"${d.toLocaleDateString('it-IT')}","${d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}",${e.price},"${e.eventId||'none'}","${(e.note||'').replace(/"/g,'""')}"`
+    })
+    fs.writeFileSync(res, '\uFEFF' + 'Data,Ora,Prezzo,Evento,Note\n' + rows.join('\n'), 'utf-8')
+    return { ok: true, path: res }
+  } catch (e) { return { ok: false, error: e.message } }
+})
+
+ipcMain.handle('open-data-folder', () => {
+  shell.openPath(getDataDir())
+})
+
+ipcMain.on('win-minimize', () => win?.minimize())
+ipcMain.on('win-maximize', () => win?.isMaximized() ? win.unmaximize() : win?.maximize())
+ipcMain.on('win-close',    () => win?.close())
+
+ipcMain.handle('get-version', () => app.getVersion())
+ipcMain.on('install-update', () => autoUpdater.quitAndInstall())
+
+let win
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1440, height: 920, minWidth: 1000, minHeight: 680,
+    frame: false, backgroundColor: '#13151f',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true, nodeIntegration: false
+    },
+    show: false
+  })
+  isDev ? win.loadURL('http://localhost:5173') : win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+  win.once('ready-to-show', () => {
+    win.show()
+    if (!isDev) {
+      autoUpdater.autoDownload = true
+      autoUpdater.autoInstallOnAppQuit = true
+      autoUpdater.on('update-available', () => win.webContents.send('update-available'))
+      autoUpdater.on('download-progress', (info) => win.webContents.send('download-progress', info))
+      autoUpdater.on('update-downloaded', () => win.webContents.send('update-downloaded'))
+      autoUpdater.on('error', (err) => console.error('AutoUpdater error:', err.message))
+      autoUpdater.checkForUpdatesAndNotify()
+    }
+  })
+}
+
+app.whenReady().then(createWindow)
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

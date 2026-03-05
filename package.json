@@ -1,0 +1,60 @@
+{
+  "name": "nostale-tracker",
+  "version": "4.0.0",
+  "description": "Nostale Market Price Tracker",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build",
+    "dist": "npm run build && electron-builder",
+    "release": "npm run build && electron-builder --publish always"
+  },
+  "build": {
+    "appId": "com.nostale.tracker",
+    "productName": "Nostale Tracker",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DiegoV-code",
+        "repo": "nostale-tracker"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "recharts": "^2.12.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "vite": "^5.4.0",
+    "wait-on": "^8.0.0"
+  }
+}
