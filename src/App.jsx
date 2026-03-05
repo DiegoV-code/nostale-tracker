@@ -211,6 +211,8 @@ export default function App() {
   const [lsTax,      setLsTax]      = useState("")
   const [partialIdx, setPartialIdx] = useState(null)
   const [partialQty, setPartialQty] = useState("")
+  const [bazarPartialKey, setBazarPartialKey] = useState(null)   // "itemName|listingIdx"
+  const [bazarPartialQty, setBazarPartialQty] = useState("")
 
   // new item form
   const [newName, setNewName] = useState("")
@@ -496,6 +498,39 @@ export default function App() {
     return { rows, totalQty, totalValue, totalTax, totalProfit }
   }, [data])
 
+  /* ── MAGAZZINO OVERVIEW — all open lots across items with aging ── */
+  const magazzinoOverview = useMemo(() => {
+    if (!data) return { rows: [], totalQty: 0, totalSpent: 0, totalEstValue: 0, totalEstProfit: 0, itemCount: 0, avgAgeDays: 0 }
+    const rows = []
+    for (const name of Object.keys(data.items || {})) {
+      const it = data.items[name]
+      const lots = it.lots || []
+      const ps = it.prices || []
+      const lastPrice = ps.length ? ps[ps.length - 1].price : null
+      const openLots = lots.filter(l => !l.sold)
+      if (!openLots.length) continue
+      const totalQty = openLots.reduce((a, l) => a + l.qty, 0)
+      const totalCost = openLots.reduce((a, l) => a + l.qty * l.price, 0)
+      const avgBuy = totalQty ? Math.round(totalCost / totalQty) : 0
+      const estValue = lastPrice != null ? totalQty * lastPrice : null
+      const estProfit = estValue != null ? estValue - totalCost : null
+      // Aging: earliest open lot timestamp
+      const oldestTs = Math.min(...openLots.map(l => new Date(l.timestamp).getTime()))
+      const ageDays = (Date.now() - oldestTs) / 86400000
+      // Has any active listing?
+      const activeListings = (it.listings || []).filter(l => !l.sold)
+      const listedQty = activeListings.reduce((a, l) => a + l.qty, 0)
+      rows.push({ name, openLots, totalQty, totalCost, avgBuy, lastPrice, estValue, estProfit, ageDays, listedQty })
+    }
+    const totalQty = rows.reduce((a, r) => a + r.totalQty, 0)
+    const totalSpent = rows.reduce((a, r) => a + r.totalCost, 0)
+    const totalEstValue = rows.reduce((a, r) => a + (r.estValue || 0), 0)
+    const totalEstProfit = rows.reduce((a, r) => a + (r.estProfit || 0), 0)
+    const itemCount = rows.length
+    const avgAgeDays = rows.length ? rows.reduce((a, r) => a + r.ageDays, 0) / rows.length : 0
+    return { rows, totalQty, totalSpent, totalEstValue, totalEstProfit, itemCount, avgAgeDays }
+  }, [data])
+
   /* ── NOS DOLLARI — items with category "Item Shop ND" ── */
   const ndItems = useMemo(() => {
     if (!data) return []
@@ -711,11 +746,12 @@ export default function App() {
       upd({ ...data, items: { ...data.items, [selItem]: it } })
     } else {
       // Partial sale — split listing into sold portion + remaining
+      const proportionalTax = listing.tax ? Math.round(listing.tax * soldQty / listing.qty) : 0
       const soldCovered = Math.min(soldQty, listing.coveredQty || 0)
       const soldEntry = {
         qty: soldQty, listPrice: listing.listPrice, buyPrice: listing.buyPrice,
         coveredQty: soldCovered, totalCost: listing.buyPrice ? listing.buyPrice * soldCovered : 0,
-        lotLinks: null, listedAt: listing.listedAt, tax: 0,
+        lotLinks: null, listedAt: listing.listedAt, tax: proportionalTax,
         sold: true, soldAt: new Date().toISOString(), lotsConsumed: false
       }
       // Reduce lotLinks on remaining listing (FIFO)
@@ -730,7 +766,8 @@ export default function App() {
       const remainingCovered = Math.max(0, (listing.coveredQty || 0) - soldQty)
       const updatedListing = {
         ...listing, qty: listing.qty - soldQty, coveredQty: remainingCovered,
-        lotLinks: newLinks, totalCost: newLinks.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0)
+        lotLinks: newLinks, totalCost: newLinks.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0),
+        tax: (listing.tax || 0) - proportionalTax
       }
       const updatedListings = [...listings]
       updatedListings[idx] = updatedListing
@@ -740,6 +777,60 @@ export default function App() {
     }
     setPartialIdx(null)
     setPartialQty("")
+  }
+
+  const markBazarListingSold = (itemName, listingIdx, soldQty) => {
+    const it = data.items[itemName]
+    if (!it) return
+    const allListings = it.listings || []
+    const allLots = it.lots || []
+    const listing = allListings[listingIdx]
+    if (!listing || listing.sold) return
+    const isFullSale = !soldQty || soldQty >= listing.qty
+
+    if (isFullSale) {
+      const updatedLots = allLots.map(l => ({ ...l }))
+      if (!listing.lotsConsumed && listing.lotLinks) {
+        for (const link of listing.lotLinks) {
+          const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
+          if (lotIdx !== -1) {
+            if (link.qty >= updatedLots[lotIdx].qty) updatedLots[lotIdx].sold = true
+            else updatedLots[lotIdx].qty -= link.qty
+          }
+        }
+      }
+      const updatedListings = allListings.map((l,i) => i === listingIdx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
+      upd({ ...data, items: { ...data.items, [itemName]: { ...it, lots: updatedLots, listings: updatedListings } } })
+    } else {
+      const proportionalTax = listing.tax ? Math.round(listing.tax * soldQty / listing.qty) : 0
+      const soldCovered = Math.min(soldQty, listing.coveredQty || 0)
+      const soldEntry = {
+        qty: soldQty, listPrice: listing.listPrice, buyPrice: listing.buyPrice,
+        coveredQty: soldCovered, totalCost: listing.buyPrice ? listing.buyPrice * soldCovered : 0,
+        lotLinks: null, listedAt: listing.listedAt, tax: proportionalTax,
+        sold: true, soldAt: new Date().toISOString(), lotsConsumed: false
+      }
+      let newLinks = listing.lotLinks ? listing.lotLinks.map(lk => ({...lk})) : []
+      let rem = soldQty
+      for (let i = 0; i < newLinks.length && rem > 0; i++) {
+        const take = Math.min(newLinks[i].qty, rem)
+        newLinks[i].qty -= take
+        rem -= take
+      }
+      newLinks = newLinks.filter(lk => lk.qty > 0)
+      const remainingCovered = Math.max(0, (listing.coveredQty || 0) - soldQty)
+      const updatedListing = {
+        ...listing, qty: listing.qty - soldQty, coveredQty: remainingCovered,
+        lotLinks: newLinks, totalCost: newLinks.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0),
+        tax: (listing.tax || 0) - proportionalTax
+      }
+      const updatedListings = [...allListings]
+      updatedListings[listingIdx] = updatedListing
+      updatedListings.push(soldEntry)
+      upd({ ...data, items: { ...data.items, [itemName]: { ...it, listings: updatedListings } } })
+    }
+    setBazarPartialKey(null)
+    setBazarPartialQty("")
   }
 
   const delListing = idx => {
@@ -920,6 +1011,11 @@ export default function App() {
         <button onClick={openQuick} title="Quick-add prezzi (Ctrl+Q)"
           style={{ background:showQuick?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${showQuick?C.gold:"#e8a83855"}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 12px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
           ⚡ QUICK
+        </button>
+
+        <button onClick={()=>setPage("magazzino")} title="Magazzino globale"
+          style={{ background:page==="magazzino"?"rgba(96,165,250,.18)":"rgba(96,165,250,.08)", border:`1px solid ${page==="magazzino"?"#60a5fa":"#60a5fa55"}`, borderRadius:7, color:"#60a5fa", cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
+          📦 MAG
         </button>
 
         <button onClick={()=>setPage("nd")} title="Nos Dollari"
@@ -1324,36 +1420,140 @@ export default function App() {
                 <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
                   {/* header */}
                   <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
-                    <div style={{ width:160, flexShrink:0 }}>ITEM</div>
+                    <div style={{ width:150, flexShrink:0 }}>ITEM</div>
                     <div style={{ width:55, flexShrink:0, textAlign:"right" }}>QTÀ</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>TOTALE</div>
-                    <div style={{ width:80, flexShrink:0, textAlign:"right" }}>TASSE</div>
-                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PROFITTO</div>
-                    <div style={{ width:90, flexShrink:0, textAlign:"right" }}>DA</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PREZZO</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>TOTALE</div>
+                    <div style={{ width:75, flexShrink:0, textAlign:"right" }}>TASSE</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PROFITTO</div>
+                    <div style={{ width:70, flexShrink:0, textAlign:"right" }}>DA</div>
+                    <div style={{ flex:1, textAlign:"right" }}>AZIONI</div>
                   </div>
-                  {bazarOverview.rows.map((r, ri) => (
-                    <div key={ri} className="r"
-                      onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("vendite") }}
-                      style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, cursor:"pointer" }}>
-                      <div style={{ width:160, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
-                      <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.listing.qty}</div>
-                      <div style={{ width:100, flexShrink:0, fontSize:14, color:C.gold, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice)}</div>
-                      <div style={{ width:100, flexShrink:0, fontSize:13, color:C.muted, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice * r.listing.qty)}</div>
-                      <div style={{ width:80, flexShrink:0, fontSize:12, color:r.listing.tax > 0 ? C.red : C.muted, fontFamily:"monospace", textAlign:"right" }}>{r.listing.tax > 0 ? fmtG(r.listing.tax) : "—"}</div>
-                      <div style={{ width:100, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.profit!=null?(r.profit>=0?C.green:C.red):C.muted }}>
-                        {r.profit != null ? `${r.profit>=0?"▲":"▼"} ${fmtG(Math.abs(r.profit))}` : "—"}
+                  {bazarOverview.rows.map((r, ri) => {
+                    const bKey = `${r.name}|${r.idx}`
+                    const isPartial = bazarPartialKey === bKey
+                    return (
+                      <div key={ri} className="r"
+                        style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, cursor:"pointer" }}>
+                        <div onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("vendite") }}
+                          style={{ width:150, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                        <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.listing.qty}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:14, color:C.gold, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice)}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:13, color:C.muted, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice * r.listing.qty)}</div>
+                        <div style={{ width:75, flexShrink:0, fontSize:12, color:r.listing.tax > 0 ? C.red : C.muted, fontFamily:"monospace", textAlign:"right" }}>{r.listing.tax > 0 ? fmtG(r.listing.tax) : "—"}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.profit!=null?(r.profit>=0?C.green:C.red):C.muted }}>
+                          {r.profit != null ? `${r.profit>=0?"▲":"▼"} ${fmtG(Math.abs(r.profit))}` : "—"}
+                        </div>
+                        <div style={{ width:70, flexShrink:0, fontSize:12, textAlign:"right", color:r.daysActive>=3?C.red:r.daysActive>=1?C.gold:C.green }}>
+                          {r.daysActive < 1 ? "oggi" : `${Math.floor(r.daysActive)}g fa`}
+                        </div>
+                        <div style={{ flex:1, display:"flex", justifyContent:"flex-end", alignItems:"center", gap:5 }} onClick={e => e.stopPropagation()}>
+                          {isPartial ? (
+                            <>
+                              <input type="number" min="1" max={r.listing.qty} value={bazarPartialQty} onChange={e=>setBazarPartialQty(e.target.value)}
+                                onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(bazarPartialQty); if(q>0&&q<=r.listing.qty) markBazarListingSold(r.name,r.idx,q) } if(e.key==="Escape"){setBazarPartialKey(null);setBazarPartialQty("")} }}
+                                autoFocus placeholder="qtà" style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
+                              {bazarPartialQty && !isNaN(parseInt(bazarPartialQty)) && parseInt(bazarPartialQty) > 0 && parseInt(bazarPartialQty) < r.listing.qty && r.listing.buyPrice != null && (() => {
+                                const sq = parseInt(bazarPartialQty)
+                                const pTax = r.listing.tax ? Math.round(r.listing.tax * sq / r.listing.qty) : 0
+                                const pProfit = (r.listing.listPrice - r.listing.buyPrice) * Math.min(sq, r.listing.coveredQty || 0) - pTax
+                                return <span style={{ fontSize:11, color:pProfit>=0?C.green:C.red, fontFamily:"monospace", fontWeight:700, whiteSpace:"nowrap" }}>
+                                  {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))}
+                                </span>
+                              })()}
+                              <button onClick={()=>{ const q=parseInt(bazarPartialQty); if(q>0&&q<=r.listing.qty) markBazarListingSold(r.name,r.idx,q) }}
+                                disabled={!bazarPartialQty||isNaN(parseInt(bazarPartialQty))||parseInt(bazarPartialQty)<=0||parseInt(bazarPartialQty)>r.listing.qty}
+                                style={{ ...pill(!!(bazarPartialQty&&!isNaN(parseInt(bazarPartialQty))&&parseInt(bazarPartialQty)>0&&parseInt(bazarPartialQty)<=r.listing.qty), C.green, { padding:"4px 8px", fontSize:11 }) }}>✓</button>
+                              <button onClick={()=>{setBazarPartialKey(null);setBazarPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
+                            </>
+                          ) : (
+                            <button onClick={()=>{setBazarPartialKey(bKey);setBazarPartialQty(String(r.listing.qty))}}
+                              style={{ ...pill(false, C.green, { padding:"4px 10px", fontSize:11 }) }}>✓ VENDUTO</button>
+                          )}
+                        </div>
                       </div>
-                      <div style={{ width:90, flexShrink:0, fontSize:12, textAlign:"right", color:r.daysActive>=3?C.red:r.daysActive>=1?C.gold:C.green }}>
-                        {r.daysActive < 1 ? "oggi" : `${Math.floor(r.daysActive)}g fa`}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
               <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
                 {bazarOverview.rows.length} listing attivi
+              </div>
+            </div>
+          )}
+
+          {/* ── MAGAZZINO PAGE ── */}
+          {page === "magazzino" && (
+            <div className="up">
+              <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:16 }}>📦 MAGAZZINO — STOCK GLOBALE</div>
+
+              {/* stat bar */}
+              {magazzinoOverview.rows.length > 0 && (
+                <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
+                  {[
+                    { l:"ITEM IN STOCK",     v:magazzinoOverview.itemCount + "",              c:C.blue  },
+                    { l:"PEZZI TOTALI",      v:magazzinoOverview.totalQty + " pz",            c:C.text  },
+                    { l:"INVESTITO",         v:fmtG(magazzinoOverview.totalSpent),             c:C.red   },
+                    { l:"VALORE STIMATO",    v:fmtG(magazzinoOverview.totalEstValue),          c:C.gold  },
+                    { l:"PROFITTO STIMATO",  v:fmtG(magazzinoOverview.totalEstProfit),         c:magazzinoOverview.totalEstProfit>=0?C.green:C.red },
+                    { l:"ETÀ MEDIA STOCK",   v:magazzinoOverview.avgAgeDays < 1 ? "< 1g" : Math.floor(magazzinoOverview.avgAgeDays) + "g", c:magazzinoOverview.avgAgeDays>=7?C.red:magazzinoOverview.avgAgeDays>=3?C.gold:C.green },
+                  ].map(s => (
+                    <div key={s.l} style={{ flex:"1 1 100px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 13px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
+                      <div style={{ fontSize:17, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {magazzinoOverview.rows.length === 0 ? (
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:250, gap:12 }}>
+                  <span style={{ fontSize:48, opacity:.08 }}>📦</span>
+                  <span style={{ color:C.muted, letterSpacing:3, fontSize:12 }}>NESSUN ITEM IN MAGAZZINO</span>
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                  {/* header */}
+                  <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", gap:10, fontSize:11, color:C.muted, letterSpacing:1 }}>
+                    <div style={{ width:160, flexShrink:0 }}>ITEM</div>
+                    <div style={{ width:55, flexShrink:0, textAlign:"right" }}>QTÀ</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO ACQ.</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>INVESTITO</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PREZZO ATT.</div>
+                    <div style={{ width:100, flexShrink:0, textAlign:"right" }}>PROFITTO ST.</div>
+                    <div style={{ width:70, flexShrink:0, textAlign:"right" }}>IN VEND.</div>
+                    <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ETÀ STOCK</div>
+                  </div>
+                  {[...magazzinoOverview.rows].sort((a,b) => b.ageDays - a.ageDays).map((r, ri) => {
+                    const ageColor = r.ageDays >= 7 ? C.red : r.ageDays >= 3 ? C.gold : C.green
+                    const ageLabel = r.ageDays < 1 ? "oggi" : Math.floor(r.ageDays) + "g"
+                    return (
+                      <div key={ri} className="r"
+                        onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("magazzino") }}
+                        style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, cursor:"pointer" }}>
+                        <div style={{ width:160, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                        <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.totalQty}</div>
+                        <div style={{ width:100, flexShrink:0, fontSize:13, color:C.text, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.avgBuy)}</div>
+                        <div style={{ width:100, flexShrink:0, fontSize:13, color:C.red, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.totalCost)}</div>
+                        <div style={{ width:100, flexShrink:0, fontSize:13, color:C.gold, fontFamily:"monospace", textAlign:"right" }}>{r.lastPrice != null ? fmtG(r.lastPrice) : "—"}</div>
+                        <div style={{ width:100, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.estProfit!=null?(r.estProfit>=0?C.green:C.red):C.muted }}>
+                          {r.estProfit != null ? `${r.estProfit>=0?"▲":"▼"} ${fmtG(Math.abs(r.estProfit))}` : "—"}
+                        </div>
+                        <div style={{ width:70, flexShrink:0, fontSize:12, textAlign:"right", color:r.listedQty > 0 ? C.gold : C.muted }}>
+                          {r.listedQty > 0 ? `${r.listedQty} pz` : "no"}
+                        </div>
+                        <div style={{ width:80, flexShrink:0, fontSize:13, fontWeight:700, textAlign:"right", color:ageColor }}>
+                          {ageLabel}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
+                {magazzinoOverview.rows.length} item in magazzino
               </div>
             </div>
           )}
@@ -2022,6 +2222,14 @@ export default function App() {
                                 <input type="number" min="1" max={l.qty} value={partialQty} onChange={e=>setPartialQty(e.target.value)}
                                   onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty); if(q>0&&q<=l.qty) markListingSold(i,q) } }}
                                   autoFocus placeholder="qtà" style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
+                                {partialQty && !isNaN(parseInt(partialQty)) && parseInt(partialQty) > 0 && parseInt(partialQty) < l.qty && l.buyPrice != null && (() => {
+                                  const sq = parseInt(partialQty)
+                                  const pTax = l.tax ? Math.round(l.tax * sq / l.qty) : 0
+                                  const pProfit = (l.listPrice - l.buyPrice) * Math.min(sq, l.coveredQty || 0) - pTax
+                                  return <span style={{ fontSize:11, color:pProfit>=0?C.green:C.red, fontFamily:"monospace", fontWeight:700, whiteSpace:"nowrap" }}>
+                                    {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))} ({sq}pz, tasse {fmtG(pTax)})
+                                  </span>
+                                })()}
                                 <button onClick={()=>{ const q=parseInt(partialQty); if(q>0&&q<=l.qty) markListingSold(i,q) }}
                                   disabled={!partialQty||isNaN(parseInt(partialQty))||parseInt(partialQty)<=0||parseInt(partialQty)>l.qty}
                                   style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty))&&parseInt(partialQty)>0&&parseInt(partialQty)<=l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>✓</button>
