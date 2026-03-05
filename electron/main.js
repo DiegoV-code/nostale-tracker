@@ -6,9 +6,7 @@ const fs   = require('fs')
 const isDev = !app.isPackaged
 
 function getDataDir() {
-  return isDev
-    ? path.join(__dirname, '..', 'dist-electron', 'win-unpacked', 'NostaleData')
-    : path.join(path.dirname(app.getPath('exe')), 'NostaleData')
+  return path.join(app.getPath('userData'), 'NostaleData')
 }
 
 function ensureDir() {

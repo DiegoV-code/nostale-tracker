@@ -1167,9 +1167,19 @@ export default function App() {
                           style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:5, color:copyFlash?C.green:C.muted, cursor:"pointer", fontSize:11, padding:"2px 7px", lineHeight:1, transition:"color .2s" }}>{copyFlash?"✓":"⎘"}</button>
                       </div>
                     )}
-                    <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>
-                      {prices.length} prezzi · {lots.length} lotti
-                      {item?.meta?.note && <span style={{ marginLeft:10, color:"#7b8ba6" }}>{item.meta.note}</span>}
+                    <div style={{ fontSize:12, color:C.muted, marginTop:2, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                      <span>{prices.length} prezzi · {lots.length} lotti</span>
+                      <select
+                        value={item?.meta?.category || "—"}
+                        onChange={e => {
+                          const cat = e.target.value === "—" ? undefined : e.target.value
+                          const it = { ...data.items[selItem], meta: { ...data.items[selItem].meta, category: cat } }
+                          upd({ ...data, items: { ...data.items, [selItem]: it } })
+                        }}
+                        style={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, padding:"2px 6px", fontSize:11, cursor:"pointer" }}>
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c === "—" ? "Nessuna categoria" : c}</option>)}
+                      </select>
+                      {item?.meta?.note && <span style={{ color:"#7b8ba6" }}>{item.meta.note}</span>}
                     </div>
                   </div>
                 </div>
