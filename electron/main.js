@@ -62,7 +62,14 @@ ipcMain.on('win-maximize', () => win?.isMaximized() ? win.unmaximize() : win?.ma
 ipcMain.on('win-close',    () => win?.close())
 
 ipcMain.handle('get-version', () => app.getVersion())
-ipcMain.on('install-update', () => autoUpdater.quitAndInstall(true, true))
+ipcMain.on('install-update', () => {
+  // Remove quit listener so app doesn't fight the updater
+  app.removeAllListeners('window-all-closed')
+  // Destroy all windows immediately to release file handles
+  BrowserWindow.getAllWindows().forEach(w => w.destroy())
+  // isSilent=false so NSIS can show retry dialog if needed, forceRunAfter=true to relaunch
+  autoUpdater.quitAndInstall(false, true)
+})
 
 let win
 function createWindow() {
