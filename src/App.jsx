@@ -661,12 +661,25 @@ export default function App() {
     upd(nd)
     setQRecent(r => [{ name: qItem, price: Math.round(price), ts: new Date().toISOString() }, ...r].slice(0, 12))
     setQPrice(""); setQNote("")
+    // Auto-advance to next item
+    const names = Object.keys(nd.items || {})
+    const curIdx = names.indexOf(qItem)
+    if (curIdx >= 0 && curIdx < names.length - 1) {
+      const nextName = names[curIdx + 1]
+      setQItem(nextName)
+      navigator.clipboard.writeText(nextName)
+    }
     setTimeout(() => qPriceRef.current?.focus(), 30)
   }
 
   const openQuick = () => {
     if (itemNames.length === 0) return
-    setQItem(q => q && data?.items?.[q] ? q : itemNames[0])
+    const first = itemNames[0]
+    setQItem(q => {
+      const name = q && data?.items?.[q] ? q : first
+      navigator.clipboard.writeText(name)
+      return name
+    })
     setQPrice(""); setQNote(""); setQRecent([])
     setShowQuick(true)
     setTimeout(() => qPriceRef.current?.focus(), 80)
@@ -881,7 +894,7 @@ export default function App() {
                   const cat    = data?.items?.[name]?.meta?.category
                   return (
                     <div key={name} className="si"
-                      onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]) }}
+                      onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]); navigator.clipboard.writeText(name); setCopyFlash(true); setTimeout(()=>setCopyFlash(false),800) }}
                       style={{ padding:"8px 9px", paddingLeft:11, borderRadius:7, background:active?"rgba(245,158,11,.09)":"transparent", border:`1px solid ${active?C.gold+"55":isEsaurito?"#a78bfa33":"transparent"}`, borderLeft:`3px solid ${sig.color}44`, transition:"all .15s", position:"relative" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                         <span style={{ fontSize:13, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
@@ -1876,12 +1889,28 @@ export default function App() {
 
             {/* form */}
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {/* item selector */}
+              {/* item selector + copy */}
               <div>
                 <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>ITEM</div>
-                <select value={qItem} onChange={e=>setQItem(e.target.value)} style={{ ...inp(), fontSize:14, color:C.gold }}>
-                  {itemNames.map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <select value={qItem} onChange={e=>{ setQItem(e.target.value); navigator.clipboard.writeText(e.target.value) }} style={{ ...inp(), fontSize:14, color:C.gold, flex:1 }}>
+                    {itemNames.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <button onClick={()=>{ if(qItem) navigator.clipboard.writeText(qItem) }} title="Copia nome"
+                    style={{ background:"rgba(232,168,56,.1)", border:`1px solid ${C.gold}55`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"8px 12px", fontSize:13, fontWeight:700, flexShrink:0 }}>
+                    ⎘
+                  </button>
+                </div>
+                {qItem && (() => {
+                  const ps = data?.items?.[qItem]?.prices || []
+                  const lastP = ps.filter(p => !p.esaurito)
+                  const last = lastP.length ? lastP[lastP.length-1] : null
+                  return last ? (
+                    <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>
+                      Ultimo: <b style={{ color:C.gold }}>{fmtG(last.price)}</b> — {fmtFull(last.timestamp)}
+                    </div>
+                  ) : null
+                })()}
               </div>
 
               {/* price + note row */}
@@ -1919,7 +1948,7 @@ export default function App() {
                 onClick={quickSave}
                 disabled={!qItem || !qPrice || isNaN(parseG(qPrice))}
                 style={{ ...pill(!!(qItem && qPrice && !isNaN(parseG(qPrice))), C.gold), padding:"11px", fontSize:14, letterSpacing:2, marginTop:2 }}>
-                ⚡ SALVA E CONTINUA (Enter)
+                ⚡ SALVA → PROSSIMO (Enter)
               </button>
             </div>
 
@@ -1942,7 +1971,7 @@ export default function App() {
 
             {/* tips */}
             <div style={{ marginTop:14, fontSize:12, color:"#7b8ba6", lineHeight:1.8 }}>
-              💡 <b style={{color:C.muted}}>Enter</b> per salvare e restare sul modal · <b style={{color:C.muted}}>Esc</b> per chiudere · <b style={{color:C.muted}}>Ctrl+Q</b> per aprire da qualsiasi schermata
+              💡 <b style={{color:C.muted}}>Enter</b> salva e avanza al prossimo item (nome copiato) · <b style={{color:C.muted}}>⎘</b> copia nome · <b style={{color:C.muted}}>Esc</b> chiudi · <b style={{color:C.muted}}>Ctrl+Q</b> apri
             </div>
           </div>
         </div>
