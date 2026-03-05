@@ -248,7 +248,6 @@ export default function App() {
   const [showQuick,   setShowQuick]   = useState(false)
   const [qItem,       setQItem]       = useState("")
   const [qPrice,      setQPrice]      = useState("")
-  const [qNote,       setQNote]       = useState("")
   const [qRecent,     setQRecent]     = useState([])   // { name, price, ts }
   const qPriceRef = useRef(null)
 
@@ -865,12 +864,12 @@ export default function App() {
   const quickSave = () => {
     const price = parseG(qPrice)
     if (!qItem || isNaN(price) || price <= 0) return
-    const entry = { price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: qNote.trim() }
+    const entry = { price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: "" }
     const it = { ...data.items[qItem], prices: [...(data.items[qItem]?.prices || []), entry] }
     const nd = { ...data, items: { ...data.items, [qItem]: it } }
     upd(nd)
     setQRecent(r => [{ name: qItem, price: Math.round(price), ts: new Date().toISOString() }, ...r].slice(0, 12))
-    setQPrice(""); setQNote("")
+    setQPrice("")
     // Auto-advance to next item
     const names = Object.keys(nd.items || {})
     const curIdx = names.indexOf(qItem)
@@ -890,7 +889,7 @@ export default function App() {
       navigator.clipboard.writeText(name)
       return name
     })
-    setQPrice(""); setQNote(""); setQRecent([])
+    setQPrice(""); setQRecent([])
     setShowQuick(true)
     setTimeout(() => qPriceRef.current?.focus(), 80)
   }
@@ -1003,15 +1002,6 @@ export default function App() {
         )}
 
         <div style={{ flex:1 }}/>
-
-        {/* Event selector */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, WebkitAppRegion:"no-drag" }}>
-          <span style={{ fontSize:12, color:C.muted }}>Evento:</span>
-          <select value={curEventId} onChange={e=>setCurEvt(e.target.value)}
-            style={{ background:"#1c1f2e", border:`1px solid ${curEvt.color}`, borderRadius:7, color:curEvt.color, padding:"5px 9px", fontSize:13, fontWeight:700, cursor:"pointer", WebkitAppRegion:"no-drag" }}>
-            {EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.icon} {ev.label}</option>)}
-          </select>
-        </div>
 
         <button onClick={openQuick} title="Quick-add prezzi (Ctrl+Q)"
           style={{ background:showQuick?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${showQuick?C.gold:"#e8a83855"}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 12px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
@@ -2427,10 +2417,7 @@ export default function App() {
               <div>
                 <div style={{ fontSize:17, color:C.gold, fontWeight:700, letterSpacing:2 }}>⚡ QUICK-ADD</div>
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:11, color:curEvt.color }}>{curEvt.icon} {curEvt.id !== "none" ? curEvt.label : "Nessun evento"}</span>
-                <button onClick={()=>setShowQuick(false)} style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, cursor:"pointer", fontSize:14, padding:"2px 8px" }}>✕</button>
-              </div>
+              <button onClick={()=>setShowQuick(false)} style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, cursor:"pointer", fontSize:14, padding:"2px 8px" }}>✕</button>
             </div>
 
             {/* form */}
@@ -2479,14 +2466,11 @@ export default function App() {
                   )}
                 </div>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>NOTA (opt.)</div>
-                  <input
-                    value={qNote}
-                    onChange={e=>setQNote(e.target.value)}
-                    onKeyDown={e=>{ if(e.key==="Enter") quickSave(); if(e.key==="Escape") setShowQuick(false) }}
-                    placeholder="es. dump, evento..."
-                    style={inp()}
-                  />
+                  <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>EVENTO</div>
+                  <select value={curEventId} onChange={e=>setCurEvt(e.target.value)}
+                    style={{ ...inp(), fontSize:14, color:curEvt.color }}>
+                    {EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.icon} {ev.label}</option>)}
+                  </select>
                 </div>
               </div>
 
