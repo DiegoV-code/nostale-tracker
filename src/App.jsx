@@ -913,6 +913,15 @@ export default function App() {
           ⚡ QUICK
         </button>
 
+        <button onClick={()=>setPage("nd")} title="Nos Dollari"
+          style={{ background:page==="nd"?"rgba(168,85,247,.18)":"rgba(168,85,247,.08)", border:`1px solid ${page==="nd"?"#a855f7":"#a855f755"}`, borderRadius:7, color:"#a855f7", cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="10" cy="10" r="9" fill="#a855f7" stroke="#c084fc" strokeWidth="1.5"/>
+            <text x="10" y="14.5" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#fff" fontFamily="monospace">$</text>
+          </svg>
+          N$
+        </button>
+
         <div style={{ fontSize:11, color:saveCol, letterSpacing:1, minWidth:90, textAlign:"right", WebkitAppRegion:"no-drag" }}>
           { saveStatus==="saving" ? "⏳ salvataggio" : saveStatus==="ok" ? "💾 salvato" : saveStatus==="error" ? "⚠ errore" : `💾 ${todayStr()}` }
         </div>
@@ -944,7 +953,7 @@ export default function App() {
 
           {/* top nav */}
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
-            {[["dashboard","🏠"],["bazar","🏷️"],["nd","💎"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
+            {[["dashboard","🏠"],["bazar","🏷️"],["analisi","📊"],["new","＋"]].map(([t,l]) => (
               <div key={t} onClick={()=>setPage(t)} style={{ flex:1, textAlign:"center", padding:"10px 0", fontSize:15, cursor:"pointer", color:page===t?C.gold:C.muted, borderBottom:`2px solid ${page===t?C.gold:"transparent"}`, transition:"all .15s" }}>{l}</div>
             ))}
           </div>
@@ -1343,7 +1352,13 @@ export default function App() {
           {/* ── NOS DOLLARI PAGE ── */}
           {page === "nd" && (
             <div className="up">
-              <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:16 }}>💎 NOS DOLLARI</div>
+              <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="10" cy="10" r="9" fill="#a855f7" stroke="#c084fc" strokeWidth="1.5"/>
+                  <text x="10" y="14.5" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#fff" fontFamily="monospace">$</text>
+                </svg>
+                NOS DOLLARI
+              </div>
 
               {/* Rate + Calculator */}
               <div style={{ display:"flex", gap:10, marginBottom:18, flexWrap:"wrap" }}>
