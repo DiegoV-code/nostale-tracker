@@ -133,7 +133,16 @@ function fmtAge(ms) {
    Confronta prezzo attuale vs media storica normale
    e restituisce un segnale di trading
 ═══════════════════════════════════════════════════════ */
-function getSignal(it) {
+const SIGNAL_DEFAULTS = { strongBuy: 15, buy: 6, high: 6, overpriced: 15, sell: 12 }
+
+function getSignal(it, cfg) {
+  const c = cfg || SIGNAL_DEFAULTS
+  const thStrongBuy = (c.strongBuy ?? 15) / 100
+  const thBuy       = (c.buy       ?? 6)  / 100
+  const thHigh      = (c.high      ?? 6)  / 100
+  const thOverprice = (c.overpriced ?? 15) / 100
+  const thSell      = (c.sell      ?? 12) / 100
+
   const prices     = it?.prices || []
   const realPrices = prices.filter(p => !p.esaurito)
   if (realPrices.length < 3) return { type:"nodata", label:"Pochi dati", hint:"Registra almeno 3 prezzi per ricevere segnali di trading", color:"#5a6a8a", bg:"#0f1119", icon:"·" }
@@ -159,13 +168,13 @@ function getSignal(it) {
   if (buyTarget  && current <= buyTarget)                 return { type:"buy_target",  label:"COMPRA ★",    hint:"Hai raggiunto il tuo obiettivo di acquisto — è il momento giusto per comprare.",                  color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct }
   if (sellTarget && openQty > 0 && current >= sellTarget) return { type:"sell_target", label:"VENDI ★",     hint:"Hai raggiunto il tuo obiettivo di vendita — metti in vendita al bazar ora.",                      color:"#3b82f6", bg:"rgba(59,130,246,.12)", icon:"🔵", diffPct }
 
-  // Segnali automatici
-  if (diffPct <= -0.15) return { type:"strong_buy",  label:"FORTE COMPRA", hint:"Il prezzo è molto più basso del solito (−15%+). Ottimo momento per fare scorta.",                color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct }
-  if (diffPct <= -0.06) return { type:"buy",         label:"COMPRA",       hint:"Il prezzo è sotto la media storica. Buon momento per acquistare.",                               color:"#34d399", bg:"rgba(52,211,153,.08)", icon:"🟢", diffPct }
-  if (diffPct >=  0.15) return { type:"overpriced",  label:"TROPPO CARO",  hint:"Il prezzo è molto sopra la media (+15%+). Sconsigliato acquistare — aspetta che scenda.",        color:"#ef4444", bg:"rgba(239,68,68,.10)",  icon:"🔴", diffPct }
-  if (diffPct >=  0.06) return { type:"high",        label:"SOPRA MEDIA",  hint:"Il prezzo è un po' alto rispetto alla media. Meglio aspettare o vendere se hai stock.",          color:"#f97316", bg:"rgba(249,115,22,.08)", icon:"🟠", diffPct }
-  if (avgBuy && current >= avgBuy * 1.12 && openQty > 0)
-                         return { type:"sell",        label:"VENDI",        hint:"Il prezzo attuale è più alto di quanto hai pagato (+12%). Valuta di mettere in vendita.",        color:"#3b82f6", bg:"rgba(59,130,246,.10)", icon:"🔵", diffPct }
+  // Segnali automatici (soglie configurabili)
+  if (diffPct <= -thStrongBuy) return { type:"strong_buy",  label:"FORTE COMPRA", hint:`Il prezzo è molto più basso del solito (−${c.strongBuy ?? 15}%+). Ottimo momento per fare scorta.`,                color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct }
+  if (diffPct <= -thBuy)       return { type:"buy",         label:"COMPRA",       hint:"Il prezzo è sotto la media storica. Buon momento per acquistare.",                               color:"#34d399", bg:"rgba(52,211,153,.08)", icon:"🟢", diffPct }
+  if (diffPct >=  thOverprice) return { type:"overpriced",  label:"TROPPO CARO",  hint:`Il prezzo è molto sopra la media (+${c.overpriced ?? 15}%+). Sconsigliato acquistare — aspetta che scenda.`,        color:"#ef4444", bg:"rgba(239,68,68,.10)",  icon:"🔴", diffPct }
+  if (diffPct >=  thHigh)      return { type:"high",        label:"SOPRA MEDIA",  hint:"Il prezzo è un po' alto rispetto alla media. Meglio aspettare o vendere se hai stock.",          color:"#f97316", bg:"rgba(249,115,22,.08)", icon:"🟠", diffPct }
+  if (avgBuy && current >= avgBuy * (1 + thSell) && openQty > 0)
+                         return { type:"sell",        label:"VENDI",        hint:`Il prezzo attuale è più alto di quanto hai pagato (+${c.sell ?? 12}%). Valuta di mettere in vendita.`,        color:"#3b82f6", bg:"rgba(59,130,246,.10)", icon:"🔵", diffPct }
   return               { type:"hold",          label:"NELLA NORMA",  hint:"Il prezzo è nella media storica. Nessuna azione urgente — monitora e aspetta un'opportunità.",   color:"#f59e0b", bg:"rgba(245,158,11,.08)", icon:"🟡", diffPct }
 }
 
@@ -197,9 +206,13 @@ export default function App() {
   const [updateError, setUpdateError] = useState("")
 
   // navigation
-  const [page,    setPage]    = useState("dashboard")   // dashboard | item | new
+  const [page,    setPage]    = useState("dashboard")   // dashboard | item | new | settings
   const [selItem, setSelItem] = useState(null)
   const [subPage, setSubPage] = useState("prices")      // prices | lots | charts
+
+  // settings
+  const [showSettings, setShowSettings] = useState(false)
+  const [settingsCategory, setSettingsCategory] = useState("salvataggio")
 
   // sidebar search
   const [search, setSearch] = useState("")
@@ -266,13 +279,14 @@ export default function App() {
   /* ── KEYBOARD SHORTCUTS ── */
   useEffect(() => {
     const handler = e => {
+      if (e.key === "Escape" && showSettings) { setShowSettings(false); return }
       if (e.key === "Escape" && showQuick) { setShowQuick(false); return }
       // Ctrl+Q apre/chiude quick-add
       if ((e.ctrlKey || e.metaKey) && e.key === "q") { e.preventDefault(); showQuick ? setShowQuick(false) : openQuick() }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [showQuick, itemNames]) // eslint-disable-line
+  }, [showQuick, showSettings, itemNames]) // eslint-disable-line
 
   /* ── LOAD ── */
   useEffect(() => {
@@ -338,7 +352,7 @@ export default function App() {
       })
     } else if (sideSort === "signal") {
       const ord = { strong_buy:0, buy:1, buy_target:0, hold:2, esaurito:3, high:4, sell:5, overpriced:6, sell_target:5, nodata:7 }
-      names = [...names].sort((a, b) => (ord[getSignal(data?.items?.[a]).type]??7) - (ord[getSignal(data?.items?.[b]).type]??7))
+      names = [...names].sort((a, b) => (ord[getSignal(data?.items?.[a], data?.signalConfig).type]??7) - (ord[getSignal(data?.items?.[b], data?.signalConfig).type]??7))
     } else {
       names = [...names].sort((a, b) => a.localeCompare(b))
     }
@@ -660,7 +674,7 @@ export default function App() {
       const lsList = it.listings || []
 
       const current    = ps.length ? ps[ps.length-1].price : null
-      const signal     = getSignal(it)
+      const signal     = getSignal(it, data?.signalConfig)
 
       const openLots   = ls.filter(l => !l.sold)
       const stockQty   = openLots.reduce((a,l) => a+l.qty, 0)
@@ -1047,8 +1061,6 @@ export default function App() {
     transition: "all .15s", ...extra
   })
 
-  const saveCol = saveStatus==="saving" ? C.gold : saveStatus==="ok" ? C.green : saveStatus==="error" ? C.red : C.muted
-
   /* ════════════════════════════════════════════════════
      RENDER
   ════════════════════════════════════════════════════ */
@@ -1110,16 +1122,10 @@ export default function App() {
           Nos Dollari
         </button>
 
-        <div style={{ fontSize:11, color:saveCol, letterSpacing:1, minWidth:90, textAlign:"right", WebkitAppRegion:"no-drag" }}>
-          { saveStatus==="saving" ? "⏳ salvataggio" : saveStatus==="ok" ? "💾 salvato" : saveStatus==="error" ? "⚠ errore" : `💾 ${todayStr()}` }
-        </div>
-
-        <div
-          title={`Cartella dati: ${dataPath}`}
-          onClick={() => window.api.openDataFolder()}
-          style={{ fontSize:11, color:C.muted, cursor:"pointer", WebkitAppRegion:"no-drag", letterSpacing:1 }}>
-          📁
-        </div>
+        <button onClick={()=>setShowSettings(true)} title="Impostazioni"
+          style={{ background:showSettings?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${showSettings?C.gold:"#e8a83855"}`, borderRadius:7, color:showSettings?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
+          ⚙️ Settings
+        </button>
 
         {/* window controls */}
         <div style={{ display:"flex", gap:3, WebkitAppRegion:"no-drag" }}>
@@ -1183,7 +1189,7 @@ export default function App() {
                 {filtered.map(name => {
                   const { last, trend, tColor, openQty, count, isEsaurito } = sideStats(name)
                   const active = selItem === name && page === "item"
-                  const sig    = getSignal(data?.items?.[name])
+                  const sig    = getSignal(data?.items?.[name], data?.signalConfig)
                   const cat    = data?.items?.[name]?.meta?.category
                   return (
                     <div key={name} className="si"
@@ -1258,7 +1264,7 @@ export default function App() {
                     const ps      = it.prices || []
                     const ls      = it.lots   || []
                     const lsList  = it.listings || []
-                    const sig     = getSignal(it)
+                    const sig     = getSignal(it, data?.signalConfig)
                     const last    = ps[ps.length-1]?.price
                     const prev    = ps[ps.length-2]?.price
                     const trend   = last!=null&&prev!=null ? (last>prev?"▲":last<prev?"▼":"—") : null
@@ -1997,7 +2003,7 @@ export default function App() {
 
               {/* ── SIGNAL + TARGET BAR ── */}
               {(() => {
-                const sig  = getSignal(item)
+                const sig  = getSignal(item, data?.signalConfig)
                 const buyT  = item?.meta?.buyTarget
                 const sellT = item?.meta?.sellTarget
                 const diffEv = allStats?.avgEvent && allStats?.avgNormal
@@ -2602,6 +2608,136 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* ══ SETTINGS MODAL ══ */}
+      {showSettings && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9997 }}>
+          <div className="up" style={{ width:"80%", height:"80%", maxWidth:900, maxHeight:700, background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, display:"flex", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.6)" }}>
+
+            {/* Sidebar sinistra */}
+            <div style={{ width:180, background:"#0f1119", borderRight:`1px solid ${C.border}`, padding:"20px 0", display:"flex", flexDirection:"column", gap:2, flexShrink:0 }}>
+              <div style={{ padding:"0 16px 14px", fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2 }}>⚙️ SETTINGS</div>
+              {[
+                { k:"salvataggio", l:"💾 Salvataggio" },
+                { k:"strategia",   l:"📊 Strategia"   },
+              ].map(({ k, l }) => (
+                <div key={k} onClick={()=>setSettingsCategory(k)}
+                  style={{ padding:"10px 16px", fontSize:13, color:settingsCategory===k?C.gold:C.muted, background:settingsCategory===k?"rgba(232,168,56,.1)":"transparent", borderLeft:`3px solid ${settingsCategory===k?C.gold:"transparent"}`, cursor:"pointer", transition:"all .15s", fontWeight:settingsCategory===k?700:400 }}>
+                  {l}
+                </div>
+              ))}
+              <div style={{ flex:1 }}/>
+              <div style={{ padding:"10px 16px" }}>
+                <button onClick={()=>setShowSettings(false)} style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:6, color:C.muted, cursor:"pointer", padding:"6px 14px", fontSize:12, width:"100%" }}>Chiudi</button>
+              </div>
+            </div>
+
+            {/* Area contenuto destra */}
+            <div style={{ flex:1, padding:28, overflowY:"auto" }}>
+
+              {/* ── SALVATAGGIO ── */}
+              {settingsCategory === "salvataggio" && (
+                <div className="up">
+                  <div style={{ fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2, marginBottom:20 }}>💾 SALVATAGGIO</div>
+
+                  <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                    {/* Stato salvataggio */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>STATO SALVATAGGIO</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <span style={{ fontSize:20 }}>{saveStatus==="saving"?"⏳":saveStatus==="ok"?"✅":saveStatus==="error"?"⚠️":"💾"}</span>
+                        <div>
+                          <div style={{ fontSize:15, color:saveStatus==="saving"?C.gold:saveStatus==="ok"?C.green:saveStatus==="error"?C.red:C.text, fontWeight:700 }}>
+                            {saveStatus==="saving"?"Salvataggio in corso...":saveStatus==="ok"?"Salvato con successo":saveStatus==="error"?"Errore di salvataggio":"Pronto"}
+                          </div>
+                          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Data: {todayStr()}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Path dati */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>PERCORSO DATI</div>
+                      <div style={{ fontSize:13, color:C.text, fontFamily:"monospace", wordBreak:"break-all", marginBottom:10 }}>{dataPath}</div>
+                      <button onClick={()=>window.api.openDataFolder()} style={{ ...pill(false, C.gold, { padding:"6px 14px", fontSize:12 }) }}>📁 Apri cartella dati</button>
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>INFORMAZIONI</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, fontSize:13, color:C.muted }}>
+                        <div>Versione: <b style={{ color:C.text }}>v{appVersion}</b></div>
+                        <div>Salvataggio automatico con backup (data.backup.json)</div>
+                        <div>Item tracciati: <b style={{ color:C.text }}>{Object.keys(data?.items || {}).length}</b></div>
+                        <div>Prezzi registrati: <b style={{ color:C.text }}>{Object.values(data?.items || {}).reduce((a,it)=>a+(it.prices?.length||0),0)}</b></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── STRATEGIA ── */}
+              {settingsCategory === "strategia" && (
+                <div className="up">
+                  <div style={{ fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2, marginBottom:8 }}>📊 STRATEGIA — CONFIGURAZIONE SEGNALI</div>
+                  <div style={{ fontSize:12, color:C.muted, marginBottom:20 }}>
+                    Configura le soglie percentuali per i segnali di trading. I segnali vengono calcolati confrontando il prezzo attuale con la media storica dell'item.
+                  </div>
+
+                  <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                    {[
+                      { k:"strongBuy",  label:"FORTE COMPRA",  icon:"🟢", desc:"Prezzo molto sotto la media", color:"#10b981", suffix:"% sotto media" },
+                      { k:"buy",        label:"COMPRA",        icon:"🟢", desc:"Prezzo sotto la media",       color:"#34d399", suffix:"% sotto media" },
+                      { k:"high",       label:"SOPRA MEDIA",   icon:"🟠", desc:"Prezzo sopra la media",       color:"#f97316", suffix:"% sopra media" },
+                      { k:"overpriced", label:"TROPPO CARO",   icon:"🔴", desc:"Prezzo molto sopra la media", color:"#ef4444", suffix:"% sopra media" },
+                      { k:"sell",       label:"VENDI",         icon:"🔵", desc:"Prezzo sopra il costo medio di acquisto", color:"#3b82f6", suffix:"% sopra costo acq." },
+                    ].map(s => {
+                      const cfg = data?.signalConfig || SIGNAL_DEFAULTS
+                      const val = cfg[s.k] ?? SIGNAL_DEFAULTS[s.k]
+                      return (
+                        <div key={s.k} style={{ background:"#0f1119", border:`1px solid ${s.color}33`, borderRadius:10, padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
+                          <span style={{ fontSize:22 }}>{s.icon}</span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, color:s.color, fontWeight:700, letterSpacing:1 }}>{s.label}</div>
+                            <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{s.desc}</div>
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                            <input
+                              type="number" min="1" max="99" step="1"
+                              value={val}
+                              onChange={e => {
+                                const v = parseInt(e.target.value)
+                                if (isNaN(v) || v < 1 || v > 99) return
+                                const newCfg = { ...(data?.signalConfig || SIGNAL_DEFAULTS), [s.k]: v }
+                                upd({ ...data, signalConfig: newCfg })
+                              }}
+                              style={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:6, color:s.color, padding:"8px 10px", fontSize:16, fontWeight:700, fontFamily:"monospace", width:70, textAlign:"center", outline:"none" }}
+                            />
+                            <span style={{ fontSize:12, color:C.muted, minWidth:110 }}>{s.suffix}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Reset defaults */}
+                  <div style={{ marginTop:18, display:"flex", gap:10, alignItems:"center" }}>
+                    <button onClick={() => upd({ ...data, signalConfig: { ...SIGNAL_DEFAULTS } })}
+                      style={{ ...pill(false, C.muted, { padding:"8px 16px", fontSize:12 }) }}>
+                      Ripristina valori predefiniti
+                    </button>
+                    <span style={{ fontSize:11, color:C.muted }}>
+                      Default: Forte Compra {SIGNAL_DEFAULTS.strongBuy}% · Compra {SIGNAL_DEFAULTS.buy}% · Sopra {SIGNAL_DEFAULTS.high}% · Caro {SIGNAL_DEFAULTS.overpriced}% · Vendi {SIGNAL_DEFAULTS.sell}%
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══ QUICK-ADD MODAL ══ */}
       {showQuick && (
