@@ -1470,7 +1470,7 @@ export default function App() {
                 <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
                   {[
                     { l:"SLOT ATTIVE",     v:bazarOverview.rows.length + "",       c:C.gold  },
-                    { l:"PEZZI TOTALI",    v:bazarOverview.totalQty + " pz",       c:C.text  },
+                    { l:"COSTO TOTALE SLOT", v:fmtG(bazarOverview.rows.reduce((a,r) => a + (r.listing.buyPrice != null ? r.listing.buyPrice * (r.listing.coveredQty || r.listing.qty) : 0), 0)), c:C.red },
                     { l:"VALORE AL BAZAR", v:fmtG(bazarOverview.totalValue),       c:C.gold  },
                     { l:"TASSE TOTALI",    v:fmtG(bazarOverview.totalTax),         c:C.red   },
                     { l:"PROFITTO ATTESO", v:fmtG(bazarOverview.totalProfit),      c:bazarOverview.totalProfit>=0?C.green:C.red },
@@ -1496,9 +1496,9 @@ export default function App() {
                     <div style={{ width:55, flexShrink:0, textAlign:"right" }}>QTÀ</div>
                     <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PREZZO</div>
                     <div style={{ width:95, flexShrink:0, textAlign:"right" }}>TOTALE</div>
+                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>COSTO</div>
                     <div style={{ width:75, flexShrink:0, textAlign:"right" }}>TASSE</div>
-                    <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PROFITTO</div>
-                    <div style={{ width:70, flexShrink:0, textAlign:"right" }}>DA</div>
+                    <div style={{ width:90, flexShrink:0, textAlign:"right" }}>DA</div>
                     <div style={{ flex:1, textAlign:"right" }}>AZIONI</div>
                   </div>
                   {bazarOverview.rows.map((r, ri) => {
@@ -1512,12 +1512,10 @@ export default function App() {
                         <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.listing.qty}</div>
                         <div style={{ width:95, flexShrink:0, fontSize:14, color:C.gold, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice)}</div>
                         <div style={{ width:95, flexShrink:0, fontSize:13, color:C.muted, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.listing.listPrice * r.listing.qty)}</div>
+                        <div style={{ width:95, flexShrink:0, fontSize:13, color:r.listing.buyPrice != null ? C.text : C.muted, fontFamily:"monospace", textAlign:"right" }}>{r.listing.buyPrice != null ? fmtG(r.listing.buyPrice * (r.listing.coveredQty || r.listing.qty)) : "—"}</div>
                         <div style={{ width:75, flexShrink:0, fontSize:12, color:r.listing.tax > 0 ? C.red : C.muted, fontFamily:"monospace", textAlign:"right" }}>{r.listing.tax > 0 ? fmtG(r.listing.tax) : "—"}</div>
-                        <div style={{ width:95, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.profit!=null?(r.profit>=0?C.green:C.red):C.muted }}>
-                          {r.profit != null ? `${r.profit>=0?"▲":"▼"} ${fmtG(Math.abs(r.profit))}` : "—"}
-                        </div>
-                        <div style={{ width:70, flexShrink:0, fontSize:12, textAlign:"right", color:r.daysActive>=3?C.red:r.daysActive>=1?C.gold:C.green }}>
-                          {r.daysActive < 1 ? "oggi" : `${Math.floor(r.daysActive)}g fa`}
+                        <div style={{ width:90, flexShrink:0, fontSize:12, fontFamily:"monospace", textAlign:"right", color:r.daysActive>=7?C.red:r.daysActive>=3?C.gold:C.green }}>
+                          {fmtAge(r.daysActive * 86400000)}
                         </div>
                         <div style={{ flex:1, display:"flex", justifyContent:"flex-end", alignItems:"center", gap:5 }} onClick={e => e.stopPropagation()}>
                           {isPartial ? (
@@ -1569,14 +1567,6 @@ export default function App() {
                     .map(r => ({ name: r.name, days: r.avgSell, ms: r.avgSell * 86400000 }))
                     .sort((a, b) => b.days - a.days)
                   if (!sellRows.length) return null
-                  const fmtDur = ms => {
-                    const d = Math.floor(ms / 86400000)
-                    const h = Math.floor((ms % 86400000) / 3600000)
-                    const m = Math.floor((ms % 3600000) / 60000)
-                    if (d > 0) return `${d}g ${h}h ${m}m`
-                    if (h > 0) return `${h}h ${m}m`
-                    return `${m}m`
-                  }
                   const avgDays = sellRows.reduce((a, r) => a + r.days, 0) / sellRows.length
                   const chartData = sellRows.map(r => ({ name: r.name, giorni: Math.round(r.days * 10) / 10 }))
                   return (
@@ -1594,17 +1584,17 @@ export default function App() {
                             return (
                               <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"7px 10px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
                                 <div style={{ flex:1, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
-                                <div style={{ width:120, textAlign:"right", fontSize:13, fontFamily:"monospace", fontWeight:700, color:col }}>{fmtDur(r.ms)}</div>
+                                <div style={{ width:120, textAlign:"right", fontSize:13, fontFamily:"monospace", fontWeight:700, color:col }}>{fmtAge(r.ms)}</div>
                               </div>
                             )
                           })}
                           <div style={{ fontSize:11, color:C.muted, marginTop:4, textAlign:"right", paddingRight:10 }}>
-                            Media: <b style={{ color:C.gold }}>{fmtDur(avgDays * 86400000)}</b>
+                            Media: <b style={{ color:C.gold }}>{fmtAge(avgDays * 86400000)}</b>
                           </div>
                         </div>
                         {/* Chart right */}
-                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:200 }}>
-                          <ResponsiveContainer width="100%" height={Math.max(220, sellRows.length * 35)}>
+                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300 }}>
+                          <ResponsiveContainer width="100%" height={Math.max(400, sellRows.length * 45)}>
                             <BarChart data={chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
                               <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
                               <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
