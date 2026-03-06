@@ -203,7 +203,6 @@ export default function App() {
   // lot form (magazzino)
   const [lQty,   setLQty]   = useState("")
   const [lPrice, setLPrice] = useState("")
-  const [lNote,  setLNote]  = useState("")
 
   // listing form (in vendita)
   const [lsQty,      setLsQty]      = useState("")
@@ -744,16 +743,21 @@ export default function App() {
     const qty   = parseInt(lQty)
     const price = parseG(lPrice)
     if (!selItem || isNaN(qty) || qty <= 0 || qty > 999 || isNaN(price) || price <= 0) return
-    const lot = { id: Date.now() + '_' + Math.random().toString(36).slice(2,6), qty, price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: lNote.trim(), sold: false }
+    const roundedPrice = Math.round(price)
+    // #7 — Se esiste un lotto aperto con lo stesso prezzo, somma le quantità (max 999)
+    const existingIdx = lots.findIndex(l => !l.sold && l.price === roundedPrice)
+    if (existingIdx !== -1) {
+      const newQty = Math.min(lots[existingIdx].qty + qty, 999)
+      const updatedLots = lots.map((l, i) => i === existingIdx ? { ...l, qty: newQty } : l)
+      const it = { ...data.items[selItem], lots: updatedLots }
+      upd({ ...data, items: { ...data.items, [selItem]: it } })
+      setLQty(""); setLPrice("")
+      return
+    }
+    const lot = { id: Date.now() + '_' + Math.random().toString(36).slice(2,6), qty, price: roundedPrice, timestamp: new Date().toISOString(), eventId: curEventId, note: "", sold: false }
     const it  = { ...data.items[selItem], lots: [...lots, lot] }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
-    setLQty(""); setLPrice(""); setLNote("")
-  }
-
-  const toggleSold = idx => {
-    const updated = lots.map((l,i) => i === idx ? { ...l, sold: !l.sold } : l)
-    const it = { ...data.items[selItem], lots: updated }
-    upd({ ...data, items: { ...data.items, [selItem]: it } })
+    setLQty(""); setLPrice("")
   }
 
   const delLot = idx => {
@@ -2245,10 +2249,6 @@ export default function App() {
                           </div>
                         </div>
                       )}
-                      <div style={{ flex:"1 1 160px" }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>NOTA</div>
-                        <input value={lNote} onChange={e=>setLNote(e.target.value)} placeholder="es. comprato da X..." style={inp()}/>
-                      </div>
                       <button onClick={recordLot} disabled={!lQty||!lPrice||isNaN(parseG(lPrice))} style={{ ...pill(!!(lQty&&lPrice&&!isNaN(parseG(lPrice))),C.blue), padding:"8px 18px", flexShrink:0 }}>
                         🛒 ACQUISTO
                       </button>
@@ -2278,33 +2278,12 @@ export default function App() {
                             )}
                             {ev.id !== "none" && <span style={{ fontSize:12, color:ev.color }}>{ev.icon}</span>}
                             <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
-                            <button onClick={()=>toggleSold(i)} style={{ ...pill(false,C.green,{ padding:"4px 10px", fontSize:12 }) }}>✓ VENDUTO</button>
                             <button onClick={()=>delLot(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
                           </div>
                         )
                       })}
                     </div>
 
-                    {lots.filter(l=>l.sold).length > 0 && (<>
-                      <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:8 }}>ACQUISTI VENDUTI</div>
-                      <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:200, overflowY:"auto" }}>
-                        {lots.map((l, i) => {
-                          if (!l.sold) return null
-                          const ev = EVT[l.eventId] || EVT.none
-                          return (
-                            <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:6, padding:"7px 12px", gap:10, opacity:.6 }}>
-                              <span style={{ fontSize:12, color:C.muted, minWidth:118 }}>{fmtFull(l.timestamp)}</span>
-                              <span style={{ fontSize:13, color:C.muted, fontWeight:700, fontFamily:"monospace" }}>×{l.qty} @ {fmtG(l.price)} = {fmtG(l.price*l.qty)}</span>
-                              <span style={{ fontSize:12, color:C.green, marginLeft:4 }}>✓ venduto</span>
-                              {ev.id !== "none" && <span style={{ fontSize:12, color:ev.color }}>{ev.icon}</span>}
-                              <span style={{ fontSize:12, color:"#6b7a96", flex:1 }}>{l.note}</span>
-                              <button onClick={()=>toggleSold(i)} style={{ fontSize:11, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:4, cursor:"pointer", padding:"2px 7px" }}>riapri</button>
-                              <button onClick={()=>delLot(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </>)}
                   </div>
                 </div>
               )}
