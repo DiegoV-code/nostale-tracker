@@ -41,7 +41,7 @@ function fmtG(n, short = true) {
 // Parse "150k" "1.5kk" "2kkk" "150000" → number
 function parseG(str) {
   if (!str) return NaN
-  const s = String(str).trim().toLowerCase().replace(",", ".")
+  const s = String(str).trim().toLowerCase().replace(/,/g, ".")
   if (s.endsWith("kkk")) return parseFloat(s) * 1_000_000_000
   if (s.endsWith("kk"))  return parseFloat(s) * 1_000_000
   if (s.endsWith("k"))   return parseFloat(s) * 1_000
@@ -106,7 +106,7 @@ function calcVolatility(prices) {
   if (real.length < 3) return null
   const vals = real.map(p => p.price)
   const avg  = vals.reduce((a,b) => a+b, 0) / vals.length
-  const std  = Math.sqrt(vals.reduce((a,v) => a + (v - avg) ** 2, 0) / vals.length)
+  const std  = Math.sqrt(vals.reduce((a,v) => a + (v - avg) ** 2, 0) / (vals.length - 1))
   return { cv: (std / avg) * 100, std: Math.round(std) }
 }
 
@@ -193,7 +193,7 @@ function getSignal(it, cfg) {
 ═══════════════════════════════════════════════════════ */
 const CATEGORIES = ["—", "Accessori", "Armi", "Armature", "Consumabili", "Materiali", "Rune", "Pet", "Costume", "Item Shop ND", "Altro"]
 const ND_DISCOUNTS = [0, 10, 15, 20, 25, 30, 40, 50]
-const mkInit = () => ({ items: {}, events: {} })
+const mkInit = () => ({ items: {}, events: {}, signalConfig: { ...SIGNAL_DEFAULTS } })
 
 /* ═══════════════════════════════════════════════════════
    PALETTE & STYLE HELPERS
@@ -312,16 +312,17 @@ export default function App() {
   const itemNames = useMemo(() => Object.keys(data?.items || {}), [data])
 
   /* ── KEYBOARD SHORTCUTS ── */
+  const openQuickRef = useRef(null)
   useEffect(() => {
     const handler = e => {
       if (e.key === "Escape" && showSettings) { setShowSettings(false); return }
       if (e.key === "Escape" && showQuick) { setShowQuick(false); return }
       // Ctrl+Q apre/chiude quick-add
-      if ((e.ctrlKey || e.metaKey) && e.key === "q") { e.preventDefault(); showQuick ? setShowQuick(false) : openQuick() }
+      if ((e.ctrlKey || e.metaKey) && e.key === "q") { e.preventDefault(); showQuick ? setShowQuick(false) : openQuickRef.current?.() }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [showQuick, showSettings, itemNames]) // eslint-disable-line
+  }, [showQuick, showSettings])
 
   /* ── LOAD ── */
   useEffect(() => {
@@ -369,6 +370,16 @@ export default function App() {
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
   const upd = useCallback(nd => { setData(nd); persist(nd) }, [persist])
+
+  // Reset form state when switching items
+  useEffect(() => {
+    setPVal(""); setPNote("")
+    setLQty(""); setLPrice("")
+    setLsQty(""); setLsPrice(""); setLsTax("")
+    setPartialIdx(null); setPartialQty("")
+    setRenaming(false); setRenameVal("")
+    setShowTargetEdit(false)
+  }, [selItem])
 
   /* ── CURRENT EVENT ── */
   const curEventId = data?.events?.[todayStr()] || "none"
@@ -461,7 +472,7 @@ export default function App() {
   const multiDayChart = useMemo(() => {
     if (!selItem || !data || allDays.length < 2) return []
     return [...allDays].reverse().map(d => {
-      const entries = prices.filter(p => fmtDate(new Date(p.timestamp)) === d)
+      const entries = prices.filter(p => !p.esaurito && fmtDate(new Date(p.timestamp)) === d)
       if (!entries.length) return null
       const vals = entries.map(e => e.price)
       const evP  = entries.filter(e => e.eventId !== "none").map(e => e.price)
@@ -488,7 +499,8 @@ export default function App() {
     const totalQty    = open.reduce((a,l) => a + l.qty, 0)
     const totalSpent  = open.reduce((a,l) => a + l.qty * l.price, 0)
     const avgBuy      = totalQty ? Math.round(totalSpent / totalQty) : 0
-    const currentPrice = prices.length ? prices[prices.length-1].price : null
+    const realPrices = prices.filter(p => !p.esaurito)
+    const currentPrice = realPrices.length ? realPrices[realPrices.length-1].price : null
     const estimatedValue = currentPrice ? totalQty * currentPrice : null
     const estimatedProfit = estimatedValue !== null ? estimatedValue - totalSpent : null
     return { totalQty, totalSpent, avgBuy, currentPrice, estimatedValue, estimatedProfit, openLots: open, closedLots: closed }
@@ -526,10 +538,12 @@ export default function App() {
       const openLots     = (it.lots     || []).filter(l => !l.sold)
       const activeList   = (it.listings || []).filter(l => !l.sold)
       const soldWithBuy  = (it.listings || []).filter(l => l.sold && l.buyPrice != null)
-      inStock   += openLots.reduce((a,l) => a + l.qty * l.price, 0)
-      atMarket  += activeList.reduce((a,l) => a + l.qty * l.listPrice, 0)
+      const lotValue     = openLots.reduce((a,l) => a + l.qty * l.price, 0)
+      const listValue    = activeList.reduce((a,l) => a + l.qty * l.listPrice, 0)
+      inStock   += lotValue
+      atMarket  += listValue
       realized  += soldWithBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty) - (l.tax || 0), 0)
-      totalItems++
+      if (openLots.length > 0 || activeList.length > 0) totalItems++
     }
     return { inStock, atMarket, realized, totalItems }
   }, [data])
@@ -693,7 +707,7 @@ export default function App() {
         const itemDisc  = it.meta?.ndDiscount || 0
         const disc      = ndDiscount > 0 ? ndDiscount : itemDisc
         const useCost   = disc > 0 ? Math.ceil(ndCost * (1 - disc / 100)) : ndCost
-        const ps        = it.prices || []
+        const ps        = (it.prices || []).filter(p => !p.esaurito)
         const marketPrice = ps.length ? ps[ps.length - 1].price : null
         const costGold  = useCost * rate
         const revenue   = marketPrice != null ? marketPrice * ndQty : null
@@ -711,7 +725,8 @@ export default function App() {
       const ls     = it.lots     || []
       const lsList = it.listings || []
 
-      const current    = ps.length ? ps[ps.length-1].price : null
+      const realPs     = ps.filter(p => !p.esaurito)
+      const current    = realPs.length ? realPs[realPs.length-1].price : null
       const signal     = getSignal(it, data?.signalConfig)
 
       const openLots   = ls.filter(l => !l.sold)
@@ -723,10 +738,11 @@ export default function App() {
       const bazarValue = activeL.reduce((a,l) => a+l.qty*l.listPrice, 0)
 
       const soldBuy    = lsList.filter(l => l.sold && l.buyPrice != null)
-      const roiPct     = soldBuy.length
-        ? soldBuy.reduce((a,l) => { const qty = l.coveredQty || l.qty; return a + ((l.listPrice - l.buyPrice) * qty - (l.tax || 0)) / (l.buyPrice * qty) }, 0) / soldBuy.length * 100
-        : null
-      const totalProfit = soldBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty) - (l.tax || 0), 0)
+      const totalRevenue = soldBuy.reduce((a,l) => a + l.listPrice * (l.coveredQty || l.qty), 0)
+      const totalCostA  = soldBuy.reduce((a,l) => a + l.buyPrice * (l.coveredQty || l.qty), 0)
+      const totalTaxA   = soldBuy.reduce((a,l) => a + (l.tax || 0), 0)
+      const totalProfit = totalRevenue - totalCostA - totalTaxA
+      const roiPct     = totalCostA > 0 ? (totalProfit / totalCostA) * 100 : null
 
       const soldL      = lsList.filter(l => l.sold)
       const avgSellMs  = soldL.length
@@ -742,7 +758,7 @@ export default function App() {
   /* ── SIDEBAR CARD STATS ── */
   function sideStats(name) {
     const it = data?.items?.[name]
-    if (!it) return {}
+    if (!it) return { last: null, trend: null, tColor: "#4b5563", openQty: 0, count: 0, isEsaurito: false }
     const ps         = it.prices || []
     const ls         = it.lots   || []
     const lastEntry  = ps[ps.length-1]
@@ -859,7 +875,8 @@ export default function App() {
     const tax   = lsTax.trim() ? parseG(lsTax) : 0
     if (!selItem || isNaN(qty) || qty <= 0 || isNaN(listP) || listP <= 0) return
     const match = matchLotsForQty(lots, qty)
-    const entry = { qty, listPrice: Math.round(listP), buyPrice: match.avgBuyPrice, coveredQty: match.coveredQty, totalCost: match.totalCost, lotLinks: match.links, listedAt: new Date().toISOString(), tax: isNaN(tax) ? 0 : Math.round(tax), sold: false, soldAt: null, lotsConsumed: true }
+    const hasLots = match.links && match.links.length > 0
+    const entry = { qty, listPrice: Math.round(listP), buyPrice: match.avgBuyPrice, coveredQty: match.coveredQty, totalCost: match.totalCost, lotLinks: match.links, listedAt: new Date().toISOString(), tax: isNaN(tax) ? 0 : Math.round(tax), sold: false, soldAt: null, lotsConsumed: hasLots }
     // Consume lots from warehouse immediately (FIFO)
     const updatedLots = lots.map(l => ({ ...l }))
     if (match.links) {
@@ -1036,7 +1053,7 @@ export default function App() {
     setTimeout(() => qPriceRef.current?.focus(), 30)
   }
 
-  const openQuick = () => {
+  const openQuick = useCallback(() => {
     if (itemNames.length === 0) return
     const first = itemNames[0]
     setQItem(q => {
@@ -1047,7 +1064,8 @@ export default function App() {
     setQPrice(""); setQRecent([])
     setShowQuick(true)
     setTimeout(() => qPriceRef.current?.focus(), 80)
-  }
+  }, [itemNames, data])
+  openQuickRef.current = openQuick
 
   const sortAnalysis = col => {
     if (sortCol === col) setSortDir(d => -d)
@@ -1878,7 +1896,7 @@ export default function App() {
                 </div>
 
                 <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                  {ndItems.sort((a,b) => (b.profit||0) - (a.profit||0)).map(r => (
+                  {[...ndItems].sort((a,b) => (b.profit||0) - (a.profit||0)).map(r => (
                     <div key={r.name} className="r"
                       onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("prices") }}
                       style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:6, cursor:"pointer" }}>
@@ -2851,7 +2869,9 @@ export default function App() {
             {updateStatus === "available" && (<>
               <div style={{ fontSize:40, marginBottom:12 }}>⬇️</div>
               <div style={{ fontSize:16, color:C.text, fontWeight:700, marginBottom:8 }}>Aggiornamento disponibile</div>
-              <div style={{ fontSize:13, color:C.muted }}>Download in preparazione...</div>
+              <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>Download in preparazione...</div>
+              <button onClick={() => setUpdateStatus(null)}
+                style={{ ...pill(false, C.muted), padding:"6px 16px", fontSize:12 }}>CHIUDI</button>
             </>)}
 
             {updateStatus === "downloading" && (<>
@@ -2860,7 +2880,9 @@ export default function App() {
               <div style={{ width:"100%", height:8, background:"#0f1119", borderRadius:4, overflow:"hidden", marginBottom:8 }}>
                 <div style={{ width:`${downloadPct}%`, height:"100%", background:"#ffa726", borderRadius:4, transition:"width .3s" }}/>
               </div>
-              <div style={{ fontSize:14, color:"#ffa726", fontWeight:700, fontFamily:"monospace" }}>{downloadPct}%</div>
+              <div style={{ fontSize:14, color:"#ffa726", fontWeight:700, fontFamily:"monospace", marginBottom:14 }}>{downloadPct}%</div>
+              <button onClick={() => setUpdateStatus(null)}
+                style={{ ...pill(false, C.muted), padding:"6px 16px", fontSize:12 }}>CHIUDI</button>
             </>)}
 
             {updateStatus === "downloaded" && (<>
