@@ -120,6 +120,14 @@ function fmtSellTime(listedAt, soldAt) {
   return `${mins}min`
 }
 
+/* Formato dd:hh:mm per età/durata */
+function fmtAge(ms) {
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  return `${String(d).padStart(2,'0')}:${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
+
 /* ═══════════════════════════════════════════════════════
    SIGNAL ENGINE
    Confronta prezzo attuale vs media storica normale
@@ -498,7 +506,7 @@ export default function App() {
 
   /* ── MAGAZZINO OVERVIEW — all open lots across items with aging ── */
   const magazzinoOverview = useMemo(() => {
-    if (!data) return { rows: [], totalQty: 0, totalSpent: 0, totalEstValue: 0, totalEstProfit: 0, itemCount: 0, avgAgeDays: 0 }
+    if (!data) return { rows: [], totalQty: 0, totalSpent: 0, totalEstValue: 0, totalEstProfit: 0, itemCount: 0 }
     const rows = []
     const itemSet = new Set()
     for (const name of Object.keys(data.items || {})) {
@@ -513,8 +521,9 @@ export default function App() {
       for (const lot of lots) {
         if (lot.sold) continue
         const lotCost = lot.qty * lot.price
-        const estValue = lastPrice != null ? lot.qty * lastPrice : null
-        const estProfit = estValue != null ? estValue - lotCost : null
+        // #10 — Profitto stimato = qty * (media storica - prezzo acquisto)
+        const estValue = avgPrice != null ? lot.qty * avgPrice : null
+        const estProfit = avgPrice != null ? lot.qty * (avgPrice - lot.price) : null
         const ageDays = (Date.now() - new Date(lot.timestamp).getTime()) / 86400000
         rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, lastPrice, estValue, estProfit, ageDays, avgPrice, note: lot.note })
         itemSet.add(name)
@@ -525,8 +534,7 @@ export default function App() {
     const totalEstValue = rows.reduce((a, r) => a + (r.estValue || 0), 0)
     const totalEstProfit = rows.reduce((a, r) => a + (r.estProfit || 0), 0)
     const itemCount = itemSet.size
-    const avgAgeDays = rows.length ? rows.reduce((a, r) => a + r.ageDays, 0) / rows.length : 0
-    return { rows, totalQty, totalSpent, totalEstValue, totalEstProfit, itemCount, avgAgeDays }
+    return { rows, totalQty, totalSpent, totalEstValue, totalEstProfit, itemCount }
   }, [data])
 
   /* ── STAGING & PERFORMANCE ANALYTICS ── */
@@ -1626,11 +1634,9 @@ export default function App() {
                 <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
                   {[
                     { l:"ITEM IN STOCK",     v:magazzinoOverview.itemCount + " item / " + magazzinoOverview.rows.length + " slot", c:C.blue },
-                    { l:"PEZZI TOTALI",      v:magazzinoOverview.totalQty + " pz",            c:C.text  },
                     { l:"INVESTITO",         v:fmtG(magazzinoOverview.totalSpent),             c:C.red   },
                     { l:"VALORE STIMATO",    v:fmtG(magazzinoOverview.totalEstValue),          c:C.gold  },
                     { l:"PROFITTO STIMATO",  v:fmtG(magazzinoOverview.totalEstProfit),         c:magazzinoOverview.totalEstProfit>=0?C.green:C.red },
-                    { l:"ETÀ MEDIA STOCK",   v:magazzinoOverview.avgAgeDays < 1 ? "< 1g" : Math.floor(magazzinoOverview.avgAgeDays) + "g", c:magazzinoOverview.avgAgeDays>=7?C.red:magazzinoOverview.avgAgeDays>=3?C.gold:C.green },
                   ].map(s => (
                     <div key={s.l} style={{ flex:"1 1 100px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 13px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
@@ -1660,7 +1666,7 @@ export default function App() {
                   </div>
                   {[...magazzinoOverview.rows].sort((a,b) => b.ageDays - a.ageDays).map((r, ri) => {
                     const ageColor = r.ageDays >= 7 ? C.red : r.ageDays >= 3 ? C.gold : C.green
-                    const ageLabel = r.ageDays < 1 ? "oggi" : Math.floor(r.ageDays) + "g"
+                    const ageLabel = fmtAge(r.ageDays * 86400000)
                     return (
                       <div key={ri} className="r"
                         onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("magazzino") }}
@@ -1697,7 +1703,7 @@ export default function App() {
                   <div style={{ marginTop:24 }}>
                     <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>💰 CAPITALE BLOCCATO PER ITEM</div>
                     <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
-                      <ResponsiveContainer width="100%" height={Math.max(250, performanceAnalytics.capitalChart.length * 40)}>
+                      <ResponsiveContainer width="100%" height={Math.max(400, performanceAnalytics.capitalChart.length * 45)}>
                         <BarChart data={performanceAnalytics.capitalChart} margin={{ left:10, right:20, top:5, bottom:5 }}>
                           <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
                           <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:11 }} interval={0} angle={-35} textAnchor="end" height={60}/>
@@ -1714,25 +1720,24 @@ export default function App() {
 
                 {/* Staging Time per Item — oldest open lot age */}
                 {(() => {
-                  // Group open lots by item, get oldest lot age per item
+                  // Group open lots by item, get oldest + average lot age per item
                   const stagingMap = {}
+                  const stagingAll = {}
                   for (const r of magazzinoOverview.rows) {
+                    if (!stagingAll[r.name]) stagingAll[r.name] = []
+                    stagingAll[r.name].push(r.ageDays)
                     if (!stagingMap[r.name] || r.ageDays > stagingMap[r.name].ageDays) {
                       stagingMap[r.name] = { name: r.name, ageDays: r.ageDays, ageMs: Date.now() - new Date(r.lot.timestamp).getTime() }
                     }
                   }
-                  const stagingRows = Object.values(stagingMap).sort((a, b) => b.ageDays - a.ageDays)
+                  const stagingRows = Object.values(stagingMap).map(r => {
+                    const all = stagingAll[r.name]
+                    const avg = all.reduce((a, b) => a + b, 0) / all.length
+                    return { ...r, avgDays: avg }
+                  }).sort((a, b) => b.ageDays - a.ageDays)
                   if (!stagingRows.length) return null
-                  const fmtAge = ms => {
-                    const d = Math.floor(ms / 86400000)
-                    const h = Math.floor((ms % 86400000) / 3600000)
-                    const m = Math.floor((ms % 3600000) / 60000)
-                    if (d > 0) return `${d}g ${h}h ${m}m`
-                    if (h > 0) return `${h}h ${m}m`
-                    return `${m}m`
-                  }
-                  const avgDays = stagingRows.reduce((a, r) => a + r.ageDays, 0) / stagingRows.length
-                  const chartData = stagingRows.map(r => ({ name: r.name, giorni: Math.round(r.ageDays * 10) / 10 }))
+                  const globalAvg = stagingRows.reduce((a, r) => a + r.ageDays, 0) / stagingRows.length
+                  const chartData = stagingRows.map(r => ({ name: r.name, giorni: Math.round(r.ageDays * 10) / 10, media: Math.round(r.avgDays * 10) / 10 }))
                   return (
                     <div style={{ marginTop:20 }}>
                       <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO IN MAGAZZINO — DA QUANTO TEMPO STAI TENENDO STOCK</div>
@@ -1753,19 +1758,20 @@ export default function App() {
                             )
                           })}
                           <div style={{ fontSize:11, color:C.muted, marginTop:4, textAlign:"right", paddingRight:10 }}>
-                            Media: <b style={{ color:C.gold }}>{fmtAge(avgDays * 86400000)}</b>
+                            Media globale: <b style={{ color:C.gold }}>{fmtAge(globalAvg * 86400000)}</b>
                           </div>
                         </div>
                         {/* Chart right */}
-                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:200 }}>
-                          <ResponsiveContainer width="100%" height={Math.max(220, stagingRows.length * 35)}>
+                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300 }}>
+                          <ResponsiveContainer width="100%" height={Math.max(400, stagingRows.length * 45)}>
                             <BarChart data={chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
                               <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
                               <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
                               <YAxis stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
-                              <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v) => [v + "g", "Staging"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
-                              <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Staging"/>
-                              <ReferenceLine y={Math.round(avgDays * 10) / 10} stroke={C.red} strokeWidth={2} strokeDasharray="6 3" label={{ value:`Media: ${(Math.round(avgDays * 10) / 10)}g`, fill:C.red, fontSize:11, position:"insideTopRight" }}/>
+                              <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v, name) => [v + "g", name === "media" ? "Media item" : "Max lotto"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
+                              <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Max lotto"/>
+                              <Bar dataKey="media" fill={C.gold} radius={[4,4,0,0]} name="Media item"/>
+                              <Legend formatter={v => <span style={{ color:C.muted, fontSize:11 }}>{v}</span>}/>
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
