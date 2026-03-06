@@ -87,14 +87,17 @@ function calcTrend(prices, days = 7) {
   if (recent.length < 2) return null
   const n   = recent.length
   const ys  = recent.map(p => p.price)
-  const xs  = recent.map((_, i) => i)
-  const avgX = (n - 1) / 2
+  // Use actual timestamps (in days from first entry) instead of indices
+  const t0  = new Date(recent[0].timestamp).getTime()
+  const xs  = recent.map(p => (new Date(p.timestamp).getTime() - t0) / 86400000)
+  const avgX = xs.reduce((a,b) => a+b, 0) / n
   const avgY = ys.reduce((a,b) => a+b, 0) / n
   const num  = xs.reduce((a,x,i) => a + (x - avgX) * (ys[i] - avgY), 0)
   const den  = xs.reduce((a,x) => a + (x - avgX) ** 2, 0)
   const slope = den ? num / den : 0
-  // % totale nell'arco dei giorni considerati
-  const totalChg = avgY ? ((slope * (n - 1)) / avgY) * 100 : 0
+  // % change over the actual time span
+  const span = xs[xs.length - 1] || 1
+  const totalChg = avgY ? ((slope * span) / avgY) * 100 : 0
   return { pct: totalChg, days, points: n, up: totalChg > 0 }
 }
 
@@ -110,14 +113,18 @@ function calcVolatility(prices) {
   return { cv: (std / avg) * 100, std: Math.round(std) }
 }
 
-function fmtSellTime(listedAt, soldAt) {
-  const ms    = new Date(soldAt) - new Date(listedAt)
-  const days  = Math.floor(ms / 86400000)
-  const hours = Math.floor((ms % 86400000) / 3600000)
-  const mins  = Math.floor((ms % 3600000) / 60000)
+function fmtDurationMs(ms) {
+  const safe  = Math.max(0, ms)
+  const days  = Math.floor(safe / 86400000)
+  const hours = Math.floor((safe % 86400000) / 3600000)
+  const mins  = Math.floor((safe % 3600000) / 60000)
   if (days >= 1) return `${days}g ${hours}h`
   if (hours >= 1) return `${hours}h ${mins}min`
   return `${mins}min`
+}
+
+function fmtSellTime(listedAt, soldAt) {
+  return fmtDurationMs(new Date(soldAt) - new Date(listedAt))
 }
 
 /* Formato dd:hh:mm per età/durata */
@@ -296,7 +303,7 @@ export default function App() {
 
   // nos dollari page
   const [ndBuyQty,    setNdBuyQty]    = useState("")
-  const [ndDiscount,  setNdDiscount]  = useState(0)  // global ND discount % (0 = no event)
+  const [globalNdDisc,  setGlobalNdDisc]  = useState(0)  // global ND discount % (0 = no event)
   const [ndRateInput, setNdRateInput] = useState("")
 
   // quick-add modal
@@ -305,6 +312,7 @@ export default function App() {
   const [qPrice,      setQPrice]      = useState("")
   const [qRecent,     setQRecent]     = useState([])   // { name, price, ts }
   const qPriceRef = useRef(null)
+  const copyTimer = useRef(null)
 
   const saveTimer = useRef(null)
 
@@ -619,13 +627,15 @@ export default function App() {
       const activeListings = lsList.filter(l => !l.sold)
       const soldListings = lsList.filter(l => l.sold)
 
+      // Build lot lookup map for O(1) access
+      const lotMap = new Map(lots.map(l => [l.id, l]))
+
       // Staging time: for each listing, time from its listedAt to the earliest lot timestamp linked
       const stagingDays = []
       for (const ls of lsList) {
         if (!ls.lotLinks || !ls.lotLinks.length) continue
-        // Find earliest lot used by this listing
         for (const lk of ls.lotLinks) {
-          const lot = lots.find(l => l.id === lk.lotId)
+          const lot = lotMap.get(lk.lotId)
           if (lot) {
             const days = (new Date(ls.listedAt) - new Date(lot.timestamp)) / 86400000
             stagingDays.push(days)
@@ -647,7 +657,7 @@ export default function App() {
       for (const ls of soldListings) {
         if (!ls.soldAt || !ls.lotLinks) continue
         for (const lk of ls.lotLinks) {
-          const lot = lots.find(l => l.id === lk.lotId)
+          const lot = lotMap.get(lk.lotId)
           if (lot) cycleDays.push((new Date(ls.soldAt) - new Date(lot.timestamp)) / 86400000)
         }
       }
@@ -705,7 +715,7 @@ export default function App() {
         const ndCost    = it.meta?.ndCost || 0
         const ndQty     = it.meta?.ndQty  || 1
         const itemDisc  = it.meta?.ndDiscount || 0
-        const disc      = ndDiscount > 0 ? ndDiscount : itemDisc
+        const disc      = globalNdDisc > 0 ? globalNdDisc : itemDisc
         const useCost   = disc > 0 ? Math.ceil(ndCost * (1 - disc / 100)) : ndCost
         const ps        = (it.prices || []).filter(p => !p.esaurito)
         const marketPrice = ps.length ? ps[ps.length - 1].price : null
@@ -714,7 +724,7 @@ export default function App() {
         const profit    = revenue != null && costGold > 0 ? revenue - costGold : null
         return { name, ndCost, ndQty, disc, useCost, marketPrice, costGold, revenue, profit }
       })
-  }, [data, ndDiscount])
+  }, [data, globalNdDisc])
 
   /* ── ANALISI ROWS ── */
   const analysisRows = useMemo(() => {
@@ -755,22 +765,27 @@ export default function App() {
     })
   }, [data, itemNames])
 
-  /* ── SIDEBAR CARD STATS ── */
-  function sideStats(name) {
-    const it = data?.items?.[name]
-    if (!it) return { last: null, trend: null, tColor: "#4b5563", openQty: 0, count: 0, isEsaurito: false }
-    const ps         = it.prices || []
-    const ls         = it.lots   || []
-    const lastEntry  = ps[ps.length-1]
-    const isEsaurito = lastEntry?.esaurito === true
-    const realPs     = ps.filter(p => !p.esaurito)
-    const last       = realPs[realPs.length-1]?.price
-    const prev       = realPs[realPs.length-2]?.price
-    const trend      = last != null && prev != null ? (last > prev ? "▲" : last < prev ? "▼" : "—") : null
-    const tColor     = trend === "▲" ? "#10b981" : trend === "▼" ? "#ef4444" : "#4b5563"
-    const openQty    = ls.filter(l => !l.sold).reduce((a,l) => a+l.qty, 0)
-    return { last, trend, tColor, openQty, count: realPs.length, isEsaurito }
-  }
+  /* ── SIDEBAR CARD STATS (memoized) ── */
+  const sideStatsMap = useMemo(() => {
+    const defaults = { last: null, trend: null, tColor: "#4b5563", openQty: 0, count: 0, isEsaurito: false }
+    const map = {}
+    for (const name of itemNames) {
+      const it = data?.items?.[name]
+      if (!it) { map[name] = defaults; continue }
+      const ps         = it.prices || []
+      const ls         = it.lots   || []
+      const lastEntry  = ps[ps.length-1]
+      const isEsaurito = lastEntry?.esaurito === true
+      const realPs     = ps.filter(p => !p.esaurito)
+      const last       = realPs[realPs.length-1]?.price
+      const t7         = calcTrend(ps)
+      const trend      = t7 ? (t7.pct > 0.5 ? "▲" : t7.pct < -0.5 ? "▼" : "—") : null
+      const tColor     = trend === "▲" ? C.green : trend === "▼" ? C.red : "#4b5563"
+      const openQty    = ls.filter(l => !l.sold).reduce((a,l) => a+l.qty, 0)
+      map[name] = { last, trend, tColor, openQty, count: realPs.length, isEsaurito }
+    }
+    return map
+  }, [data, itemNames])
 
   /* ── ACTIONS ── */
   const addItem = () => {
@@ -823,7 +838,9 @@ export default function App() {
     // #7 — Se esiste un lotto aperto con lo stesso prezzo, somma le quantità (max 999)
     const existingIdx = lots.findIndex(l => !l.sold && l.price === roundedPrice)
     if (existingIdx !== -1) {
-      const newQty = Math.min(lots[existingIdx].qty + qty, 999)
+      const wanted = lots[existingIdx].qty + qty
+      const newQty = Math.min(wanted, 999)
+      if (wanted > 999) alert(`Quantità limitata a 999 (erano ${wanted})`)
       const updatedLots = lots.map((l, i) => i === existingIdx ? { ...l, qty: newQty } : l)
       const it = { ...data.items[selItem], lots: updatedLots }
       upd({ ...data, items: { ...data.items, [selItem]: it } })
@@ -865,8 +882,9 @@ export default function App() {
 
   const copyName = name => {
     navigator.clipboard.writeText(name)
+    if (copyTimer.current) clearTimeout(copyTimer.current)
     setCopyFlash(true)
-    setTimeout(() => setCopyFlash(false), 1200)
+    copyTimer.current = setTimeout(() => setCopyFlash(false), 1200)
   }
 
   const addListing = () => {
@@ -1073,9 +1091,23 @@ export default function App() {
   }
 
   const exportCSV = async () => {
-    const r = await window.api.exportCsv({ name: selItem, entries: prices })
+    const r = await window.api.exportCsv({ name: selItem, entries: prices.filter(p => !p.esaurito) })
     if (r.ok) alert(`Esportato: ${r.path}`)
   }
+
+  /* ── SORTED ANALYSIS ROWS ── */
+  const sortedAnalysis = useMemo(() => {
+    return [...analysisRows].sort((a,b) => {
+      let va = a[sortCol], vb = b[sortCol]
+      if (sortCol === "signal") { va = a.signal.diffPct ?? 0; vb = b.signal.diffPct ?? 0 }
+      if (sortCol === "trend7") { va = a.trend7?.pct ?? null; vb = b.trend7?.pct ?? null }
+      if (sortCol === "vol")    { va = a.vol?.cv    ?? null; vb = b.vol?.cv    ?? null }
+      if (va == null) return 1
+      if (vb == null) return -1
+      if (typeof va === "string") return va.localeCompare(vb) * sortDir
+      return (va - vb) * sortDir
+    })
+  }, [analysisRows, sortCol, sortDir])
 
   /* ── LOADING ── */
   if (!data) return (
@@ -1212,13 +1244,13 @@ export default function App() {
                   </div>
                 )}
                 {filtered.map(name => {
-                  const { last, trend, tColor, openQty, count, isEsaurito } = sideStats(name)
+                  const { last, trend, tColor, openQty, count, isEsaurito } = sideStatsMap[name] || {}
                   const active = selItem === name && page === "item"
                   const sig    = getSignal(data?.items?.[name], data?.signalConfig)
                   const cat    = data?.items?.[name]?.meta?.category
                   return (
                     <div key={name} className="si"
-                      onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]); navigator.clipboard.writeText(name); setCopyFlash(true); setTimeout(()=>setCopyFlash(false),800) }}
+                      onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]); copyName(name) }}
                       style={{ padding:"8px 9px", paddingLeft:11, borderRadius:7, background:active?"rgba(245,158,11,.09)":"transparent", border:`1px solid ${active?C.gold+"55":isEsaurito?"#a78bfa33":"transparent"}`, borderLeft:`3px solid ${sig.color}44`, transition:"all .15s", position:"relative" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                         <span style={{ fontSize:14, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:130, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
@@ -1364,7 +1396,7 @@ export default function App() {
                           {openQty > 0 && <div style={{ fontSize:12, color:C.blue }}>📦 {openQty} in magazzino · {fmtG(spent)}</div>}
                           {activeQtyL > 0 && <div style={{ fontSize:12, color:C.gold }}>🏷️ {activeQtyL} al bazar</div>}
                           {estProfit !== null && <div style={{ fontSize:12, color:estProfit>=0?C.green:C.red }}>{estProfit>=0?"▲":"▼"} stimato {fmtG(estProfit)}</div>}
-                          {avgMs != null && <div style={{ fontSize:11, color:C.muted }}>⏱ vendita media: {fmtSellTime(0, avgMs)}</div>}
+                          {avgMs != null && <div style={{ fontSize:11, color:C.muted }}>⏱ vendita media: {fmtDurationMs(avgMs)}</div>}
                         </div>
 
                         <div style={{ fontSize:11, color:"#6b7a96", marginTop:8 }}>{ps.length} prezzi · {ls.length} acquisti · {lsList.length} listing</div>
@@ -1417,17 +1449,6 @@ export default function App() {
                     { k:"trend7",     l:"TREND 7GG",  w:"90px",  title:"Andamento del prezzo negli ultimi 7 giorni (regressione lineare)"      },
                     { k:"vol",        l:"STABILITÀ",  w:"80px",  title:"Stabilità del prezzo: STABILE = poco rischio, INSTABILE = molto rischio" },
                   ]
-                  const sorted = [...analysisRows].sort((a,b) => {
-                    let va = a[sortCol], vb = b[sortCol]
-                    if (sortCol === "signal") { va = a.signal.diffPct ?? 0; vb = b.signal.diffPct ?? 0 }
-                    if (sortCol === "trend7") { va = a.trend7?.pct ?? null; vb = b.trend7?.pct ?? null }
-                    if (sortCol === "vol")    { va = a.vol?.cv    ?? null; vb = b.vol?.cv    ?? null }
-                    if (va == null) return 1
-                    if (vb == null) return -1
-                    if (typeof va === "string") return va.localeCompare(vb) * sortDir
-                    return (va - vb) * sortDir
-                  })
-
                   const Th = ({ k, l, w, title }) => (
                     <div onClick={()=>sortAnalysis(k)} title={title||l} style={{ width:w, minWidth:w, fontSize:12, color:sortCol===k?C.gold:C.muted, letterSpacing:1, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3 }}>
                       {l}{sortCol===k ? (sortDir===1?"▲":"▼") : ""}
@@ -1441,7 +1462,7 @@ export default function App() {
                     </div>
 
                     {/* data rows */}
-                    {sorted.map((r,i) => {
+                    {sortedAnalysis.map((r,i) => {
                       const sig = r.signal
                       return (
                         <div key={r.name} className="r"
@@ -1846,12 +1867,12 @@ export default function App() {
                 </div>
 
                 {/* Event discount selector */}
-                <div style={{ flex:"0 0 200px", background:C.panel, border:`1px solid ${ndDiscount>0?"#f59e0b":C.border}`, borderRadius:10, padding:"14px 16px", transition:"all .15s" }}>
+                <div style={{ flex:"0 0 200px", background:C.panel, border:`1px solid ${globalNdDisc>0?"#f59e0b":C.border}`, borderRadius:10, padding:"14px 16px", transition:"all .15s" }}>
                   <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:6 }}>SCONTO EVENTO</div>
                   <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
                     {ND_DISCOUNTS.map(d => (
-                      <button key={d} onClick={()=>setNdDiscount(d)}
-                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${ndDiscount===d?(d>0?"#f59e0b":C.border):C.border}`, background:ndDiscount===d?(d>0?"rgba(245,158,11,.18)":"rgba(255,255,255,.05)"):"transparent", color:ndDiscount===d?(d>0?"#f59e0b":C.text):C.muted }}>
+                      <button key={d} onClick={()=>setGlobalNdDisc(d)}
+                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?"#f59e0b":C.border):C.border}`, background:globalNdDisc===d?(d>0?"rgba(245,158,11,.18)":"rgba(255,255,255,.05)"):"transparent", color:globalNdDisc===d?(d>0?"#f59e0b":C.text):C.muted }}>
                         {d === 0 ? "OFF" : `-${d}%`}
                       </button>
                     ))}
@@ -1887,7 +1908,7 @@ export default function App() {
                 {/* header */}
                 <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", gap:6, fontSize:11, color:C.muted, letterSpacing:1 }}>
                   <div style={{ width:160, flexShrink:0 }}>ITEM</div>
-                  <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ND{ndDiscount > 0 ? ` (-${ndDiscount}%)` : ""}</div>
+                  <div style={{ width:80, flexShrink:0, textAlign:"right" }}>ND{globalNdDisc > 0 ? ` (-${globalNdDisc}%)` : ""}</div>
                   <div style={{ width:55, flexShrink:0, textAlign:"right" }}>PZ</div>
                   <div style={{ width:100, flexShrink:0, textAlign:"right" }}>MERCATO</div>
                   <div style={{ width:100, flexShrink:0, textAlign:"right" }}>COSTO ORO</div>
@@ -1927,19 +1948,19 @@ export default function App() {
                           <span style={{ width:150, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flexShrink:0 }}>{r.name}</span>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <span style={{ fontSize:11, color:C.muted }}>ND:</span>
-                            <input type="number" min="0" step="1" value={it.meta?.ndCost || ""} onChange={e => {
+                            <input type="number" min="0" step="1" defaultValue={it.meta?.ndCost || ""} onBlur={e => {
                               const v = parseInt(e.target.value, 10) || 0
                               const updated = { ...it, meta: { ...it.meta, ndCost: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
-                            }} placeholder="0" style={inp({ width:70, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
+                            }} onKeyDown={e => { if(e.key==="Enter") e.target.blur() }} placeholder="0" style={inp({ width:70, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <span style={{ fontSize:11, color:C.muted }}>PZ:</span>
-                            <input type="number" min="1" step="1" value={it.meta?.ndQty || ""} onChange={e => {
+                            <input type="number" min="1" step="1" defaultValue={it.meta?.ndQty || ""} onBlur={e => {
                               const v = parseInt(e.target.value, 10) || 1
                               const updated = { ...it, meta: { ...it.meta, ndQty: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
-                            }} placeholder="1" style={inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
+                            }} onKeyDown={e => { if(e.key==="Enter") e.target.blur() }} placeholder="1" style={inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <span style={{ fontSize:11, color:"#f59e0b" }}>sconto:</span>
@@ -2198,6 +2219,7 @@ export default function App() {
                   <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:420, overflowY:"auto" }}>
                     {prices.length === 0 && <div style={{ color:C.muted, textAlign:"center", padding:36, fontSize:12 }}>Nessun prezzo registrato ancora</div>}
                     {[...prices].reverse().map((p, ri) => {
+                      const stableKey = p.timestamp || ri
                       const realIdx = prices.length - 1 - ri
                       const ev      = EVT[p.eventId] || EVT.none
                       // Trova il prezzo reale precedente (esclude esaurito)
@@ -2206,7 +2228,7 @@ export default function App() {
 
                       // Voce ESAURITO
                       if (p.esaurito) return (
-                        <div key={ri} className="r" style={{ display:"flex", alignItems:"center", background:"rgba(167,139,250,.06)", border:"1px solid #a78bfa33", borderRadius:6, padding:"7px 12px", gap:10 }}>
+                        <div key={stableKey} className="r" style={{ display:"flex", alignItems:"center", background:"rgba(167,139,250,.06)", border:"1px solid #a78bfa33", borderRadius:6, padding:"7px 12px", gap:10 }}>
                           <span style={{ fontSize:12, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(p.timestamp)}</span>
                           <span style={{ fontSize:13, color:"#a78bfa", fontWeight:700 }}>📭 ESAURITO AL BAZAR</span>
                           {ev.id !== "none" && <span style={{ fontSize:11, color:ev.color }}>{ev.icon} {ev.label}</span>}
@@ -2216,7 +2238,7 @@ export default function App() {
                       )
 
                       return (
-                        <div key={ri} className="r" style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:6, padding:"7px 12px", gap:10 }}>
+                        <div key={stableKey} className="r" style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:6, padding:"7px 12px", gap:10 }}>
                           <span style={{ fontSize:12, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(p.timestamp)}</span>
                           <span style={{ fontSize:16, color:C.gold, fontWeight:700, fontFamily:"monospace", minWidth:90, flexShrink:0 }}>{fmtG(p.price)}</span>
                           <span style={{ fontSize:12, color:C.muted, minWidth:80, fontFamily:"monospace", flexShrink:0 }}>{p.price.toLocaleString("it-IT")}</span>
@@ -2326,7 +2348,7 @@ export default function App() {
                         { l:"VALORE AL BAZAR",   v:fmtG(listingStats.activeValue),                                                c:C.text  },
                         { l:"VENDITE CHIUSE",    v:listingStats.sold.length + " listing",                                         c:C.green },
                         { l:"PROFITTO TOTALE",   v:listingStats.profitableSales.length ? fmtG(listingStats.totalProfit) : "—",    c:listingStats.totalProfit>=0?C.green:C.red },
-                        { l:"TEMPO MEDIO VEND.", v:listingStats.avgMs!=null ? fmtSellTime(0, listingStats.avgMs) : "—",           c:C.blue  },
+                        { l:"TEMPO MEDIO VEND.", v:listingStats.avgMs!=null ? fmtDurationMs(listingStats.avgMs) : "—",           c:C.blue  },
                       ].map(s => (
                         <div key={s.l} style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:9, padding:"9px 13px", flex:"1 1 90px" }}>
                           <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
