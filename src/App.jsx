@@ -122,9 +122,10 @@ function fmtSellTime(listedAt, soldAt) {
 
 /* Formato dd:hh:mm per età/durata */
 function fmtAge(ms) {
-  const d = Math.floor(ms / 86400000)
-  const h = Math.floor((ms % 86400000) / 3600000)
-  const m = Math.floor((ms % 3600000) / 60000)
+  const safe = Math.max(0, ms)
+  const d = Math.floor(safe / 86400000)
+  const h = Math.floor((safe % 86400000) / 3600000)
+  const m = Math.floor((safe % 3600000) / 60000)
   return `${String(d).padStart(2,'0')}:${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
 }
 
@@ -188,10 +189,44 @@ function getSignal(it, cfg) {
    }
    events[date] = eventId
    ndRate = number (gold per 1 ND)
+   signalConfig = { windowDays, dropPct, surgePct }
 ═══════════════════════════════════════════════════════ */
 const CATEGORIES = ["—", "Accessori", "Armi", "Armature", "Consumabili", "Materiali", "Rune", "Pet", "Costume", "Item Shop ND", "Altro"]
 const ND_DISCOUNTS = [0, 10, 15, 20, 25, 30, 40, 50]
-const INIT = { items: {}, events: {} }
+const mkInit = () => ({ items: {}, events: {} })
+
+/* ═══════════════════════════════════════════════════════
+   PALETTE & STYLE HELPERS
+═══════════════════════════════════════════════════════ */
+const C = {
+  bg:      "#13151f",
+  panel:   "#1c1f2e",
+  border:  "#272b3d",
+  border2: "#353a52",
+  text:    "#dde6f0",
+  muted:   "#8895b3",
+  gold:    "#e8a838",
+  green:   "#4ade80",
+  red:     "#fb7185",
+  blue:    "#60a5fa",
+}
+
+const inp = (extra={}) => ({
+  background: "#0f1119", border: `1px solid ${C.border2}`,
+  borderRadius: 8, color: C.text, padding: "10px 13px",
+  fontSize: 15, fontFamily: "monospace", outline: "none",
+  width: "100%", transition: "border-color .15s",
+  ...extra
+})
+
+const pill = (active, col=C.gold, extra={}) => ({
+  background: active ? col : "transparent",
+  border: `1px solid ${active ? col : C.border2}`,
+  color: active ? "#0f1119" : col,
+  borderRadius: 8, padding: "9px 16px", cursor: "pointer",
+  fontSize: 14, fontWeight: 700, letterSpacing: 1,
+  transition: "all .15s", ...extra
+})
 
 /* ═══════════════════════════════════════════════════════
    APP
@@ -200,15 +235,15 @@ export default function App() {
   const [data,       setData]      = useState(null)
   const [saveStatus, setSaveStatus]= useState("idle")
   const [dataPath,   setDataPath]  = useState("")
-  const [appVersion, setAppVersion]= useState("4.0.0")
+  const [appVersion, setAppVersion]= useState("")
   const [updateStatus, setUpdateStatus] = useState(null) // null | "available" | "downloading" | "downloaded" | "error"
   const [downloadPct, setDownloadPct] = useState(0)
   const [updateError, setUpdateError] = useState("")
 
   // navigation
-  const [page,    setPage]    = useState("dashboard")   // dashboard | item | new | settings
+  const [page,    setPage]    = useState("dashboard")   // dashboard | item | new | analisi | bazar | magazzino | nd
   const [selItem, setSelItem] = useState(null)
-  const [subPage, setSubPage] = useState("prices")      // prices | lots | charts
+  const [subPage, setSubPage] = useState("prices")      // prices | magazzino | vendite | charts
 
   // settings
   const [showSettings, setShowSettings] = useState(false)
@@ -239,7 +274,7 @@ export default function App() {
   const [newCat,  setNewCat]  = useState("—")
 
   // sidebar controls
-  const [sideSort,     setSideSort]     = useState("name")   // name | signal | profit | updated
+  const [sideSort,     setSideSort]     = useState("name")   // name | price | signal
   const [sideCategory, setSideCategory] = useState("—")
 
   // chart day
@@ -294,8 +329,9 @@ export default function App() {
       try {
         const [loaded, dp] = await Promise.all([window.api.load(), window.api.dataPath()])
         setDataPath(dp)
-        const d = loaded || INIT
-        // Migrate: add IDs to lots that don't have them
+        const raw = loaded || mkInit()
+        // Migrate: add IDs to lots that don't have them (deep-clone to avoid mutating loaded data)
+        const d = JSON.parse(JSON.stringify(raw))
         for (const it of Object.values(d.items || {})) {
           for (const lot of (it.lots || [])) {
             if (!lot.id) lot.id = lot.timestamp + '_' + Math.random().toString(36).slice(2,6)
@@ -305,10 +341,10 @@ export default function App() {
         if (d.ndRate) setNdRateInput(String(d.ndRate))
         const names = Object.keys(d.items || {})
         if (names.length) { setSelItem(names[0]); setPage("item") }
-      } catch { setData(INIT) }
+      } catch { setData(mkInit()) }
     })()
     // version + auto-update listeners
-    window.api.getVersion?.().then(v => v && setAppVersion(v))
+    window.api.getVersion?.().then(v => v && setAppVersion(v)).catch(() => {})
     const unsubs = [
       window.api.onUpdateAvailable?.(() => setUpdateStatus("available")),
       window.api.onDownloadProgress?.((info) => { setUpdateStatus("downloading"); setDownloadPct(Math.round(info.percent || 0)) }),
@@ -328,6 +364,9 @@ export default function App() {
       setTimeout(() => setSaveStatus("idle"), 2000)
     }, 600)
   }, [])
+
+  // Clear debounce timer on unmount
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
   const upd = useCallback(nd => { setData(nd); persist(nd) }, [persist])
 
@@ -475,8 +514,8 @@ export default function App() {
 
   /* ── LOT PREVIEW for listing form ── */
   const lotPreview = useMemo(() => {
-    if (!lsQty || isNaN(parseInt(lsQty)) || parseInt(lsQty) <= 0) return null
-    return matchLotsForQty(lots, parseInt(lsQty))
+    if (!lsQty || isNaN(parseInt(lsQty, 10)) || parseInt(lsQty, 10) <= 0) return null
+    return matchLotsForQty(lots, parseInt(lsQty, 10))
   }, [lots, lsQty])
 
   /* ── CAPITAL OVERVIEW ── */
@@ -508,7 +547,7 @@ export default function App() {
         const covered = l.coveredQty || 0
         const profit = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
         const daysActive = (Date.now() - new Date(l.listedAt)) / 86400000
-        rows.push({ name, idx: i, listing: l, covered, profit, daysActive })
+        rows.push({ name, listingIdx: i, listing: l, covered, profit, daysActive })
       }
     }
     const totalQty   = rows.reduce((a,r) => a + r.listing.qty, 0)
@@ -527,7 +566,6 @@ export default function App() {
       const it = data.items[name]
       const lots = it.lots || []
       const ps = it.prices || []
-      const lastPrice = ps.length ? ps[ps.length - 1].price : null
       // Average price (all real prices)
       const realPrices = ps.filter(p => !p.esaurito).map(p => p.price)
       const avgPrice = realPrices.length ? Math.round(realPrices.reduce((a, b) => a + b, 0) / realPrices.length) : null
@@ -539,7 +577,7 @@ export default function App() {
         const estValue = avgPrice != null ? lot.qty * avgPrice : null
         const estProfit = avgPrice != null ? lot.qty * (avgPrice - lot.price) : null
         const ageDays = (Date.now() - new Date(lot.timestamp).getTime()) / 86400000
-        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, lastPrice, estValue, estProfit, ageDays, avgPrice, note: lot.note })
+        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, estValue, estProfit, ageDays, avgPrice, note: lot.note })
         itemSet.add(name)
       }
     }
@@ -762,7 +800,7 @@ export default function App() {
   }
 
   const recordLot = () => {
-    const qty   = parseInt(lQty)
+    const qty   = parseInt(lQty, 10)
     const price = parseG(lPrice)
     if (!selItem || isNaN(qty) || qty <= 0 || qty > 999 || isNaN(price) || price <= 0) return
     const roundedPrice = Math.round(price)
@@ -797,14 +835,14 @@ export default function App() {
   }
 
   const renameItem = (oldName, newVal) => {
-    const newName = newVal.trim()
-    if (!newName || newName === oldName) { setRenaming(false); return }
-    if (data.items[newName]) { alert(`Esiste già un item chiamato "${newName}"`); return }
+    const trimmed = newVal.trim()
+    if (!trimmed || trimmed === oldName) { setRenaming(false); return }
+    if (data.items[trimmed]) { alert(`Esiste già un item chiamato "${trimmed}"`); return }
     const items = { ...data.items }
-    items[newName] = items[oldName]
+    items[trimmed] = items[oldName]
     delete items[oldName]
     upd({ ...data, items })
-    setSelItem(newName)
+    setSelItem(trimmed)
     setRenaming(false)
     setRenameVal("")
   }
@@ -816,7 +854,7 @@ export default function App() {
   }
 
   const addListing = () => {
-    const qty   = parseInt(lsQty)
+    const qty   = parseInt(lsQty, 10)
     const listP = parseG(lsPrice)
     const tax   = lsTax.trim() ? parseG(lsTax) : 0
     if (!selItem || isNaN(qty) || qty <= 0 || isNaN(listP) || listP <= 0) return
@@ -1029,37 +1067,6 @@ export default function App() {
       <div style={{ color:"#8895b3", fontFamily:"monospace", letterSpacing:4, fontSize:12 }}>CARICAMENTO</div>
     </div>
   )
-
-  /* ── COMMON STYLES ── */
-  const C = {
-    bg:      "#13151f",   // slate scuro, non nero puro
-    panel:   "#1c1f2e",   // card / pannelli
-    border:  "#272b3d",   // bordi sottili
-    border2: "#353a52",   // bordi secondari più visibili
-    text:    "#dde6f0",   // bianco caldo, alta leggibilità
-    muted:   "#8895b3",   // grigio-blu chiaro — MOLTO più leggibile
-    gold:    "#e8a838",   // ambra/oro caldo — meno aggressivo del giallo puro
-    green:   "#4ade80",   // verde brillante
-    red:     "#fb7185",   // rosso morbido
-    blue:    "#60a5fa",   // blu chiaro
-  }
-
-  const inp = (extra={}) => ({
-    background: "#0f1119", border: `1px solid ${C.border2}`,
-    borderRadius: 8, color: C.text, padding: "10px 13px",
-    fontSize: 15, fontFamily: "monospace", outline: "none",
-    width: "100%", transition: "border-color .15s",
-    ...extra
-  })
-
-  const pill = (active, col=C.gold, extra={}) => ({
-    background: active ? col : "transparent",
-    border: `1px solid ${active ? col : C.border2}`,
-    color: active ? "#0f1119" : col,
-    borderRadius: 8, padding: "9px 16px", cursor: "pointer",
-    fontSize: 14, fontWeight: 700, letterSpacing: 1,
-    transition: "all .15s", ...extra
-  })
 
   /* ════════════════════════════════════════════════════
      RENDER
@@ -1508,7 +1515,7 @@ export default function App() {
                     <div style={{ flex:1, textAlign:"right" }}>AZIONI</div>
                   </div>
                   {bazarOverview.rows.map((r, ri) => {
-                    const bKey = `${r.name}|${r.idx}`
+                    const bKey = `${r.name}|${r.listingIdx}`
                     const isPartial = bazarPartialKey === bKey
                     return (
                       <div key={ri} className="r"
@@ -1528,25 +1535,25 @@ export default function App() {
                             <div style={{ display:"flex", alignItems:"center", gap:6, background:"#0f1119", border:`1px solid ${C.border2}`, borderRadius:8, padding:"5px 10px" }}>
                               <span style={{ fontSize:11, color:C.muted }}>Venduti:</span>
                               <input type="number" min="1" max={r.listing.qty-1} value={bazarPartialQty} onChange={e=>setBazarPartialQty(e.target.value)}
-                                onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(bazarPartialQty); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.idx,q) } if(e.key==="Escape"){setBazarPartialKey(null);setBazarPartialQty("")} }}
+                                onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(bazarPartialQty, 10); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.listingIdx,q) } if(e.key==="Escape"){setBazarPartialKey(null);setBazarPartialQty("")} }}
                                 autoFocus style={{ ...inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" }) }}/>
                               <span style={{ fontSize:11, color:C.muted }}>/ {r.listing.qty}</span>
-                              {bazarPartialQty && !isNaN(parseInt(bazarPartialQty)) && parseInt(bazarPartialQty) > 0 && parseInt(bazarPartialQty) < r.listing.qty && r.listing.buyPrice != null && (() => {
-                                const sq = parseInt(bazarPartialQty)
+                              {bazarPartialQty && !isNaN(parseInt(bazarPartialQty, 10)) && parseInt(bazarPartialQty, 10) > 0 && parseInt(bazarPartialQty, 10) < r.listing.qty && r.listing.buyPrice != null && (() => {
+                                const sq = parseInt(bazarPartialQty, 10)
                                 const pTax = r.listing.tax ? Math.round(r.listing.tax * sq / r.listing.qty) : 0
                                 const pProfit = (r.listing.listPrice - r.listing.buyPrice) * Math.min(sq, r.listing.coveredQty || 0) - pTax
                                 return <span style={{ fontSize:11, color:pProfit>=0?C.green:C.red, fontFamily:"monospace", fontWeight:700, whiteSpace:"nowrap" }}>
                                   {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))}
                                 </span>
                               })()}
-                              <button onClick={()=>{ const q=parseInt(bazarPartialQty); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.idx,q) }}
-                                disabled={!bazarPartialQty||isNaN(parseInt(bazarPartialQty))||parseInt(bazarPartialQty)<=0||parseInt(bazarPartialQty)>=r.listing.qty}
-                                style={{ ...pill(!!(bazarPartialQty&&!isNaN(parseInt(bazarPartialQty))&&parseInt(bazarPartialQty)>0&&parseInt(bazarPartialQty)<r.listing.qty), C.green, { padding:"4px 8px", fontSize:11 }) }}>CONFERMA</button>
+                              <button onClick={()=>{ const q=parseInt(bazarPartialQty, 10); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.listingIdx,q) }}
+                                disabled={!bazarPartialQty||isNaN(parseInt(bazarPartialQty, 10))||parseInt(bazarPartialQty, 10)<=0||parseInt(bazarPartialQty, 10)>=r.listing.qty}
+                                style={{ ...pill(!!(bazarPartialQty&&!isNaN(parseInt(bazarPartialQty, 10))&&parseInt(bazarPartialQty, 10)>0&&parseInt(bazarPartialQty, 10)<r.listing.qty), C.green, { padding:"4px 8px", fontSize:11 }) }}>CONFERMA</button>
                               <button onClick={()=>{setBazarPartialKey(null);setBazarPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
                             </div>
                           ) : (
                             <div style={{ display:"flex", gap:4 }}>
-                              <button onClick={()=>markBazarListingSold(r.name,r.idx)} title="Venduto tutto"
+                              <button onClick={()=>markBazarListingSold(r.name,r.listingIdx)} title="Venduto tutto"
                                 style={{ ...pill(false, C.green, { padding:"4px 10px", fontSize:11 }) }}>✓ TUTTO</button>
                               {r.listing.qty > 1 && <button onClick={()=>{setBazarPartialKey(bKey);setBazarPartialQty("")}} title="Vendita parziale"
                                 style={{ ...pill(false, C.blue, { padding:"4px 8px", fontSize:11 }) }}>½</button>}
@@ -1815,7 +1822,7 @@ export default function App() {
                     <input type="number" value={ndBuyQty} onChange={e=>setNdBuyQty(e.target.value)} placeholder="es. 500" style={inp({ fontSize:15, width:110 })}/>
                     <span style={{ fontSize:13, color:C.muted }}>ND =</span>
                     <span style={{ fontSize:18, color:C.gold, fontWeight:700, fontFamily:"monospace" }}>
-                      {ndBuyQty && !isNaN(parseInt(ndBuyQty)) && data?.ndRate ? fmtG(parseInt(ndBuyQty) * data.ndRate) : "—"}
+                      {ndBuyQty && !isNaN(parseInt(ndBuyQty, 10)) && data?.ndRate ? fmtG(parseInt(ndBuyQty, 10) * data.ndRate) : "—"}
                     </span>
                   </div>
                 </div>
@@ -1903,7 +1910,7 @@ export default function App() {
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <span style={{ fontSize:11, color:C.muted }}>ND:</span>
                             <input type="number" min="0" step="1" value={it.meta?.ndCost || ""} onChange={e => {
-                              const v = parseInt(e.target.value) || 0
+                              const v = parseInt(e.target.value, 10) || 0
                               const updated = { ...it, meta: { ...it.meta, ndCost: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
                             }} placeholder="0" style={inp({ width:70, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
@@ -1911,7 +1918,7 @@ export default function App() {
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <span style={{ fontSize:11, color:C.muted }}>PZ:</span>
                             <input type="number" min="1" step="1" value={it.meta?.ndQty || ""} onChange={e => {
-                              const v = parseInt(e.target.value) || 1
+                              const v = parseInt(e.target.value, 10) || 1
                               const updated = { ...it, meta: { ...it.meta, ndQty: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
                             }} placeholder="1" style={inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
@@ -1919,7 +1926,7 @@ export default function App() {
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                             <span style={{ fontSize:11, color:"#f59e0b" }}>sconto:</span>
                             <select value={it.meta?.ndDiscount || 0} onChange={e => {
-                              const v = parseInt(e.target.value)
+                              const v = parseInt(e.target.value, 10)
                               const updated = { ...it, meta: { ...it.meta, ndDiscount: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
                             }} style={{ background:"#1c1f2e", border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?"#f59e0b":C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
@@ -2243,11 +2250,11 @@ export default function App() {
                           <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>{fmtG(parseG(lPrice))}</div>
                         )}
                       </div>
-                      {lQty && lPrice && !isNaN(parseG(lPrice)) && parseInt(lQty)>0 && (
+                      {lQty && lPrice && !isNaN(parseG(lPrice)) && parseInt(lQty, 10)>0 && (
                         <div style={{ flex:"0 0 140px" }}>
                           <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>TOTALE LOTTO</div>
                           <div style={{ fontSize:15, color:C.blue, fontWeight:700, fontFamily:"monospace", padding:"8px 0" }}>
-                            {fmtG(parseInt(lQty)*parseG(lPrice))}
+                            {fmtG(parseInt(lQty, 10)*parseG(lPrice))}
                           </div>
                         </div>
                       )}
@@ -2371,7 +2378,7 @@ export default function App() {
                         })()}
                       </div>
                     )}
-                    {lotPreview && lotPreview.links.length === 0 && parseInt(lsQty) > 0 && (
+                    {lotPreview && lotPreview.links.length === 0 && parseInt(lsQty, 10) > 0 && (
                       <div style={{ marginTop:8, fontSize:11, color:C.muted }}>Nessun lotto disponibile in magazzino per questo item</div>
                     )}
                   </div>
@@ -2419,20 +2426,20 @@ export default function App() {
                               <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, background:"#0f1119", border:`1px solid ${C.border2}`, borderRadius:8, padding:"6px 10px" }}>
                                 <span style={{ fontSize:11, color:C.muted }}>Venduti:</span>
                                 <input type="number" min="1" max={l.qty-1} value={partialQty} onChange={e=>setPartialQty(e.target.value)}
-                                  onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty); if(q>0&&q<l.qty) markListingSold(i,q) } if(e.key==="Escape"){setPartialIdx(null);setPartialQty("")} }}
+                                  onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty, 10); if(q>0&&q<l.qty) markListingSold(i,q) } if(e.key==="Escape"){setPartialIdx(null);setPartialQty("")} }}
                                   autoFocus style={{ ...inp({ width:65, padding:"4px 8px", fontSize:13, textAlign:"center" }) }}/>
                                 <span style={{ fontSize:11, color:C.muted }}>/ {l.qty}</span>
-                                {partialQty && !isNaN(parseInt(partialQty)) && parseInt(partialQty) > 0 && parseInt(partialQty) < l.qty && l.buyPrice != null && (() => {
-                                  const sq = parseInt(partialQty)
+                                {partialQty && !isNaN(parseInt(partialQty, 10)) && parseInt(partialQty, 10) > 0 && parseInt(partialQty, 10) < l.qty && l.buyPrice != null && (() => {
+                                  const sq = parseInt(partialQty, 10)
                                   const pTax = l.tax ? Math.round(l.tax * sq / l.qty) : 0
                                   const pProfit = (l.listPrice - l.buyPrice) * Math.min(sq, l.coveredQty || 0) - pTax
                                   return <span style={{ fontSize:11, color:pProfit>=0?C.green:C.red, fontFamily:"monospace", fontWeight:700, whiteSpace:"nowrap" }}>
                                     {pProfit>=0?"▲":"▼"}{fmtG(Math.abs(pProfit))}
                                   </span>
                                 })()}
-                                <button onClick={()=>{ const q=parseInt(partialQty); if(q>0&&q<l.qty) markListingSold(i,q) }}
-                                  disabled={!partialQty||isNaN(parseInt(partialQty))||parseInt(partialQty)<=0||parseInt(partialQty)>=l.qty}
-                                  style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty))&&parseInt(partialQty)>0&&parseInt(partialQty)<l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>CONFERMA</button>
+                                <button onClick={()=>{ const q=parseInt(partialQty, 10); if(q>0&&q<l.qty) markListingSold(i,q) }}
+                                  disabled={!partialQty||isNaN(parseInt(partialQty, 10))||parseInt(partialQty, 10)<=0||parseInt(partialQty, 10)>=l.qty}
+                                  style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty, 10))&&parseInt(partialQty, 10)>0&&parseInt(partialQty, 10)<l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>CONFERMA</button>
                                 <button onClick={()=>{setPartialIdx(null);setPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
                               </div>
                             ) : (
@@ -2708,7 +2715,7 @@ export default function App() {
                               type="number" min="1" max="99" step="1"
                               value={val}
                               onChange={e => {
-                                const v = parseInt(e.target.value)
+                                const v = parseInt(e.target.value, 10)
                                 if (isNaN(v) || v < 1 || v > 99) return
                                 const newCfg = { ...(data?.signalConfig || SIGNAL_DEFAULTS), [s.k]: v }
                                 upd({ ...data, signalConfig: newCfg })
