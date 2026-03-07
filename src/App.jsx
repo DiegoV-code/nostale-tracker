@@ -732,18 +732,18 @@ export default function App() {
       const it = data.items[name]
       const lots = it.lots || []
       const ps = it.prices || []
-      // Average price (all real prices)
-      const realPrices = ps.filter(p => !p.esaurito).map(p => p.price)
-      const avgPrice = realPrices.length ? Math.round(realPrices.reduce((a, b) => a + b, 0) / realPrices.length) : null
+      // Ultimo prezzo reale (coerente con lotStats)
+      const realPrices = ps.filter(p => !p.esaurito)
+      const currentPrice = realPrices.length ? realPrices[realPrices.length - 1].price : null
       // One row per open lot
       for (const lot of lots) {
         if (lot.sold) continue
         const lotCost = lot.qty * lot.price
-        // #10 — Profitto stimato = qty * (media storica - prezzo acquisto)
-        const estValue = avgPrice != null ? lot.qty * avgPrice : null
-        const estProfit = avgPrice != null ? lot.qty * (avgPrice - lot.price) : null
+        // Profitto stimato = qty * (ultimo prezzo - prezzo acquisto)
+        const estValue = currentPrice != null ? lot.qty * currentPrice : null
+        const estProfit = currentPrice != null ? lot.qty * (currentPrice - lot.price) : null
         const ageDays = (Date.now() - new Date(lot.timestamp).getTime()) / 86400000
-        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, estValue, estProfit, ageDays, avgPrice, note: lot.note })
+        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, estValue, estProfit, ageDays, currentPrice, note: lot.note })
         itemSet.add(name)
       }
     }
@@ -1018,18 +1018,26 @@ export default function App() {
     const price = parseG(lPrice)
     if (!selItem || isNaN(qty) || qty <= 0 || qty > 999 || isNaN(price) || price <= 0) return
     const roundedPrice = Math.round(price)
-    // #7 — Se esiste un lotto aperto con lo stesso prezzo, somma le quantità (max 999)
+    // Anomaly check: se il prezzo devia >40% dalla media storica, chiedi conferma
+    const realPrices = prices.filter(p => !p.esaurito)
+    if (realPrices.length >= 3) {
+      const avg    = realPrices.reduce((a, p) => a + p.price, 0) / realPrices.length
+      const devPct = Math.abs(roundedPrice - avg) / avg
+      if (devPct > 0.40) {
+        const dir = roundedPrice > avg ? "sopra" : "sotto"
+        if (!window.confirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+      }
+    }
+    // Se esiste un lotto aperto con lo stesso prezzo e c'è spazio, somma le quantità
     const existingIdx = lots.findIndex(l => !l.sold && l.price === roundedPrice)
-    if (existingIdx !== -1) {
-      const wanted = lots[existingIdx].qty + qty
-      const newQty = Math.min(wanted, 999)
-      if (wanted > 999) alert(`Quantità limitata a 999 (erano ${wanted})`)
-      const updatedLots = lots.map((l, i) => i === existingIdx ? { ...l, qty: newQty } : l)
+    if (existingIdx !== -1 && lots[existingIdx].qty + qty <= 999) {
+      const updatedLots = lots.map((l, i) => i === existingIdx ? { ...l, qty: l.qty + qty } : l)
       const it = { ...data.items[selItem], lots: updatedLots }
       upd({ ...data, items: { ...data.items, [selItem]: it } })
       setLQty(""); setLPrice("")
       return
     }
+    // Altrimenti crea un nuovo lotto (anche se stesso prezzo — non c'è spazio per il merge)
     const lot = { id: Date.now() + '_' + Math.random().toString(36).slice(2,6), qty, price: roundedPrice, timestamp: new Date().toISOString(), eventId: curEventId, note: "", sold: false }
     const it  = { ...data.items[selItem], lots: [...lots, lot] }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
@@ -1043,7 +1051,17 @@ export default function App() {
     if (linkedListings.length > 0) {
       if (!window.confirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
     }
-    const it = { ...data.items[selItem], lots: lots.filter((_,i) => i !== idx) }
+    // Clean up dangling lotLinks in active listings that referenced this lot
+    const cleanedListings = listings.map(l => {
+      if (l.sold || !l.lotLinks) return l
+      const cleaned = l.lotLinks.filter(lk => lk.lotId !== lot.id)
+      if (cleaned.length === l.lotLinks.length) return l
+      const removedQty = l.lotLinks.filter(lk => lk.lotId === lot.id).reduce((a, lk) => a + lk.qty, 0)
+      const newCovered = Math.max(0, (l.coveredQty || 0) - removedQty)
+      const newCost = cleaned.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0)
+      return { ...l, lotLinks: cleaned, coveredQty: newCovered, totalCost: newCost, buyPrice: newCovered > 0 ? Math.round(newCost / newCovered) : null }
+    })
+    const it = { ...data.items[selItem], lots: lots.filter((_,i) => i !== idx), listings: cleanedListings }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
   }
 
@@ -1831,7 +1849,7 @@ export default function App() {
                     <div style={{ width:55, flexShrink:0, textAlign:"right" }}>QTÀ</div>
                     <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PREZZO ACQ.</div>
                     <div style={{ width:95, flexShrink:0, textAlign:"right" }}>COSTO SLOT</div>
-                    <div style={{ width:85, flexShrink:0, textAlign:"right" }}>MEDIA</div>
+                    <div style={{ width:85, flexShrink:0, textAlign:"right" }}>ATTUALE</div>
                     <div style={{ width:95, flexShrink:0, textAlign:"right" }}>PROFITTO ST.</div>
                     <div style={{ width:75, flexShrink:0, textAlign:"right" }}>ETÀ</div>
                     <div style={{ flex:1, textAlign:"right" }}>DATA</div>
@@ -1847,7 +1865,7 @@ export default function App() {
                         <div style={{ width:55, flexShrink:0, fontSize:14, color:C.blue, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>×{r.qty}</div>
                         <div style={{ width:95, flexShrink:0, fontSize:13, color:C.text, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.price)}</div>
                         <div style={{ width:95, flexShrink:0, fontSize:13, color:C.red, fontFamily:"monospace", textAlign:"right" }}>{fmtG(r.lotCost)}</div>
-                        <div style={{ width:85, flexShrink:0, fontSize:13, fontFamily:"monospace", textAlign:"right", color:C.muted }}>{r.avgPrice != null ? fmtG(r.avgPrice) : "—"}</div>
+                        <div style={{ width:85, flexShrink:0, fontSize:13, fontFamily:"monospace", textAlign:"right", color:C.muted }}>{r.currentPrice != null ? fmtG(r.currentPrice) : "—"}</div>
                         <div style={{ width:95, flexShrink:0, fontSize:13, fontWeight:700, fontFamily:"monospace", textAlign:"right", color:r.estProfit!=null?(r.estProfit>=0?C.green:C.red):C.muted }}>
                           {r.estProfit != null ? `${r.estProfit>=0?"▲":"▼"} ${fmtG(Math.abs(r.estProfit))}` : "—"}
                         </div>
@@ -2415,7 +2433,8 @@ export default function App() {
                       {lots.map((l, i) => {
                         if (l.sold) return null
                         const ev = allEVT[l.eventId] || EVT.none
-                        const currentP = prices.length ? prices[prices.length-1].price : null
+                        const realPs = prices.filter(p => !p.esaurito)
+                        const currentP = realPs.length ? realPs[realPs.length-1].price : null
                         const profit   = currentP ? (currentP - l.price) * l.qty : null
                         return (
                           <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 12px", gap:10, flexWrap:"wrap" }}>
