@@ -237,6 +237,17 @@ const LOT_STRATEGIES = [
   { id: "best_price", label: "Prezzo migliore" },
 ]
 
+const SIGNAL_GROUPS = [
+  { id:"__all__",   label:"TUTTI",      color:"#8895b3", types:null },
+  { id:"buy",       label:"🟢 COMPRA",  color:"#10b981", types:["strong_buy","buy","buy_target"] },
+  { id:"hold",      label:"🟡 NORMA",   color:"#f59e0b", types:["hold"] },
+  { id:"high",      label:"🟠 SOPRA",   color:"#f97316", types:["high"] },
+  { id:"overpriced",label:"🔴 CARO",    color:"#ef4444", types:["overpriced"] },
+  { id:"sell",      label:"🔵 VENDI",   color:"#3b82f6", types:["sell","sell_target"] },
+  { id:"esaurito",  label:"📭 ESAURITO", color:"#a78bfa", types:["esaurito"] },
+  { id:"nodata",    label:"· POCHI DATI", color:"#5a6a8a", types:["nodata"] },
+]
+
 const mkInit = () => ({
   items: {}, events: {}, signalConfig: { ...SIGNAL_DEFAULTS },
   ndRate: 0, globalNdDisc: 0, qRecent: [],
@@ -385,6 +396,8 @@ export default function App() {
   const [analSignalFilter, setAnalSignalFilter] = useState("__all__")  // "__all__" or signal type group
   const [analNameW, setAnalNameW] = useState(160)    // resizable ITEM column width
   const analResizing = useRef(false)
+  const [sidebarW, setSidebarW] = useState(230)      // resizable sidebar width
+  const sideResizing = useRef(false)
 
   // nos dollari page
   const [ndBuyQty,    setNdBuyQty]    = useState("")
@@ -1300,18 +1313,6 @@ export default function App() {
     })
   }, [data, itemNames])
 
-  /* ── SIGNAL FILTER GROUPS ── */
-  const SIGNAL_GROUPS = [
-    { id:"__all__",   label:"TUTTI",     color:C.muted,   types:null },
-    { id:"buy",       label:"🟢 COMPRA",  color:"#10b981", types:["strong_buy","buy","buy_target"] },
-    { id:"hold",      label:"🟡 NORMA",   color:"#f59e0b", types:["hold"] },
-    { id:"high",      label:"🟠 SOPRA",   color:"#f97316", types:["high"] },
-    { id:"overpriced",label:"🔴 CARO",    color:"#ef4444", types:["overpriced"] },
-    { id:"sell",      label:"🔵 VENDI",   color:"#3b82f6", types:["sell","sell_target"] },
-    { id:"esaurito",  label:"📭 ESAURITO", color:"#a78bfa", types:["esaurito"] },
-    { id:"nodata",    label:"· POCHI DATI", color:"#5a6a8a", types:["nodata"] },
-  ]
-
   /* ── SORTED ANALYSIS ROWS ── */
   const sortedAnalysis = useMemo(() => {
     let rows = analysisRows
@@ -1427,7 +1428,21 @@ export default function App() {
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
 
         {/* ── SIDEBAR ── */}
-        <div style={{ width:230, background:C.panel, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
+        <div style={{ width:sidebarW, background:C.panel, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", flexShrink:0, position:"relative" }}>
+          {/* resize handle */}
+          <div
+            onMouseDown={e => {
+              e.preventDefault()
+              sideResizing.current = true
+              const startX = e.clientX
+              const startW = sidebarW
+              const onMove = ev => { if (sideResizing.current) setSidebarW(Math.max(180, Math.min(400, startW + ev.clientX - startX))) }
+              const onUp = () => { sideResizing.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
+              window.addEventListener("mousemove", onMove)
+              window.addEventListener("mouseup", onUp)
+            }}
+            style={{ position:"absolute", right:-3, top:0, bottom:0, width:6, cursor:"col-resize", zIndex:10 }}
+          />
 
           {/* top nav */}
           <div style={{ display:"flex", borderBottom:`1px solid ${C.border}` }}>
@@ -1481,7 +1496,7 @@ export default function App() {
                       onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]); copyName(name) }}
                       style={{ padding:"8px 9px", paddingLeft:11, borderRadius:7, background:active?"rgba(245,158,11,.09)":"transparent", border:`1px solid ${active?C.gold+"55":isEsaurito?"#a78bfa33":"transparent"}`, borderLeft:`3px solid ${sig.color}44`, transition:"all .15s", position:"relative" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <span style={{ fontSize:14, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:130, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
+                        <span style={{ fontSize:14, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:sidebarW - 100, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
                         {isEsaurito
                           ? <span style={{ fontSize:13, color:"#a78bfa", background:"rgba(167,139,250,.12)", borderRadius:4, padding:"2px 6px" }}>📭</span>
                           : sig.type !== "nodata" && <span style={{ fontSize:13, color:sig.color, fontWeight:700 }}>{sig.icon}</span>}
@@ -1637,7 +1652,7 @@ export default function App() {
               </div>
 
               {/* Tabella */}
-              <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+              <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden", overflowX:"auto" }}>
                 {/* Header */}
                 {(() => {
                   const nameW = analNameW + "px"
@@ -1652,17 +1667,18 @@ export default function App() {
                     { k:"vol",        l:"STABILITÀ",  w:"80px",  title:"Stabilità del prezzo: STABILE = poco rischio, INSTABILE = molto rischio" },
                   ]
                   const Th = ({ k, l, w, title, resizable }) => (
-                    <div onClick={()=>sortAnalysis(k)} title={title||l} style={{ width:w, minWidth:w, fontSize:12, color:sortCol===k?C.gold:C.muted, letterSpacing:1, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, position:"relative" }}>
+                    <div onClick={()=>{ if (!analResizing.current) sortAnalysis(k) }} title={title||l} style={{ width:w, minWidth:w, fontSize:12, color:sortCol===k?C.gold:C.muted, letterSpacing:1, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, position:"relative" }}>
                       {l}{sortCol===k ? (sortDir===1?"▲":"▼") : ""}
                       {resizable && (
                         <div
                           onMouseDown={e => {
                             e.stopPropagation()
+                            e.preventDefault()
                             analResizing.current = true
                             const startX = e.clientX
                             const startW = analNameW
                             const onMove = ev => { if (analResizing.current) setAnalNameW(Math.max(100, Math.min(400, startW + ev.clientX - startX))) }
-                            const onUp = () => { analResizing.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
+                            const onUp = () => { setTimeout(() => { analResizing.current = false }, 50); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
                             window.addEventListener("mousemove", onMove)
                             window.addEventListener("mouseup", onUp)
                           }}
