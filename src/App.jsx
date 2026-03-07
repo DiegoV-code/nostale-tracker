@@ -63,19 +63,21 @@ const fmtFull = iso => { const d = new Date(iso); return `${fmtDate(d)} ${fmtTim
 const todayStr = () => fmtDate(new Date())
 
 /* ═══════════════════════════════════════════════════════
-   LOT MATCHING — FIFO match dei lotti magazzino
-   Usato quando si crea un listing per calcolare il costo
-   reale dai lotti di acquisto
+   LOT MATCHING — FIFO/LIFO/best-price match dei lotti
 ═══════════════════════════════════════════════════════ */
-function matchLotsForQty(lots, qty) {
+function matchLotsForQty(lots, qty, strategy = "fifo") {
+  const indexed = lots.map((l, i) => ({ ...l, _origIdx: i }))
+  let ordered
+  if (strategy === "lifo")            ordered = [...indexed].reverse()
+  else if (strategy === "best_price") ordered = [...indexed].filter(l => !l.sold && l.qty > 0).sort((a, b) => a.price - b.price)
+  else                                ordered = indexed
   const links = []
   let remaining = qty
-  for (let i = 0; i < lots.length; i++) {
+  for (const l of ordered) {
     if (remaining <= 0) break
-    const l = lots[i]
     if (l.sold || l.qty <= 0) continue
     const take = Math.min(l.qty, remaining)
-    links.push({ lotId: l.id, lotIdx: i, qty: take, unitPrice: l.price })
+    links.push({ lotId: l.id, lotIdx: l._origIdx, qty: take, unitPrice: l.price })
     remaining -= take
   }
   const coveredQty = qty - remaining
@@ -229,7 +231,55 @@ function getSignal(it, cfg) {
 ═══════════════════════════════════════════════════════ */
 const CATEGORIES = ["—", "Accessori", "Armi", "Armature", "Consumabili", "Materiali", "Rune", "Pet", "Costume", "Item Shop ND", "Altro"]
 const ND_DISCOUNTS = [0, 10, 15, 20, 25, 30, 40, 50]
-const mkInit = () => ({ items: {}, events: {}, signalConfig: { ...SIGNAL_DEFAULTS } })
+const LOT_STRATEGIES = [
+  { id: "fifo",       label: "FIFO (primo acquistato)" },
+  { id: "lifo",       label: "LIFO (ultimo acquistato)" },
+  { id: "best_price", label: "Prezzo migliore" },
+]
+
+const mkInit = () => ({
+  items: {}, events: {}, signalConfig: { ...SIGNAL_DEFAULTS },
+  ndRate: 0, globalNdDisc: 0, qRecent: [],
+  trendDays: 7, lotStrategy: "fifo",
+  customCategories: [], customEvents: [], customNdDiscounts: [],
+})
+
+function migrateData(d) {
+  const defaults = mkInit()
+  for (const key of Object.keys(defaults)) {
+    if (d[key] === undefined) d[key] = defaults[key]
+  }
+  if (d.signalConfig) {
+    for (const key of Object.keys(SIGNAL_DEFAULTS)) {
+      if (d.signalConfig[key] === undefined) d.signalConfig[key] = SIGNAL_DEFAULTS[key]
+    }
+  }
+  for (const it of Object.values(d.items || {})) {
+    if (!it.meta) it.meta = {}
+    if (!it.prices) it.prices = []
+    if (!it.lots) it.lots = []
+    if (!it.listings) it.listings = []
+    for (const lot of it.lots) {
+      if (!lot.id) lot.id = lot.timestamp + '_' + Math.random().toString(36).slice(2,6)
+    }
+  }
+  return d
+}
+
+/* ═══════════════════════════════════════════════════════
+   STAT BAR — reusable KPI card row
+═══════════════════════════════════════════════════════ */
+const StatBar = ({ items, gap = 8, mb = 18 }) => (
+  <div style={{ display:"flex", gap, marginBottom:mb, flexWrap:"wrap" }}>
+    {items.map(s => (
+      <div key={s.l} title={s.title || ""} style={{ flex:s.flex || "1 1 100px", background:s.bg2 || C.panel, border:`1px solid ${s.border || C.border}`, borderRadius:s.radius || 10, padding:s.pad || "10px 13px", cursor:s.title?"help":"default" }}>
+        <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
+        <div style={{ fontSize:s.big?22:17, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
+        {s.sub && <div style={{ fontSize:11, color:"#6b7a96", marginTop:2 }}>{s.sub}</div>}
+      </div>
+    ))}
+  </div>
+)
 
 /* ═══════════════════════════════════════════════════════
    PALETTE & STYLE HELPERS
@@ -284,6 +334,8 @@ export default function App() {
   // settings
   const [showSettings, setShowSettings] = useState(false)
   const [settingsCategory, setSettingsCategory] = useState("salvataggio")
+  const [newCategoryInput, setNewCategoryInput] = useState("")
+  const [newNdDiscInput, setNewNdDiscInput] = useState("")
 
   // sidebar search
   const [search, setSearch] = useState("")
@@ -354,12 +406,24 @@ export default function App() {
     const handler = e => {
       if (e.key === "Escape" && showSettings) { setShowSettings(false); return }
       if (e.key === "Escape" && showQuick) { setShowQuick(false); return }
-      // Ctrl+Q apre/chiude quick-add
-      if ((e.ctrlKey || e.metaKey) && e.key === "q") { e.preventDefault(); showQuick ? setShowQuick(false) : openQuickRef.current?.() }
+      const ctrl = e.ctrlKey || e.metaKey
+      if (ctrl && e.key === "q") { e.preventDefault(); showQuick ? setShowQuick(false) : openQuickRef.current?.() }
+      if (ctrl && e.key === "n") { e.preventDefault(); setPage("new") }
+      if (ctrl && e.key === "1") { e.preventDefault(); setPage("dashboard") }
+      if (ctrl && e.key === "2") { e.preventDefault(); setPage("analisi") }
+      if (ctrl && e.key === "3") { e.preventDefault(); setPage("bazar") }
+      if (ctrl && e.key === "4") { e.preventDefault(); setPage("magazzino") }
+      if (ctrl && e.key === "5") { e.preventDefault(); setPage("nd") }
+      if (ctrl && e.key === ",") { e.preventDefault(); setShowSettings(s => !s) }
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
   }, [showQuick, showSettings])
+
+  // Persist navigation state to localStorage
+  useEffect(() => {
+    if (data) localStorage.setItem("nostale-nav", JSON.stringify({ page, selItem, subPage }))
+  }, [page, selItem, subPage, data])
 
   /* ── LOAD ── */
   useEffect(() => {
@@ -367,20 +431,25 @@ export default function App() {
       try {
         const [loaded, dp] = await Promise.all([window.api.load(), window.api.dataPath()])
         setDataPath(dp)
-        const raw = loaded || mkInit()
-        // Migrate: add IDs to lots that don't have them (deep-clone to avoid mutating loaded data)
-        const d = JSON.parse(JSON.stringify(raw))
-        for (const it of Object.values(d.items || {})) {
-          for (const lot of (it.lots || [])) {
-            if (!lot.id) lot.id = lot.timestamp + '_' + Math.random().toString(36).slice(2,6)
-          }
-        }
+        // Deep-clone + migrate to ensure all fields exist
+        const d = migrateData(JSON.parse(JSON.stringify(loaded || mkInit())))
         setData(d)
         if (d.ndRate) setNdRateInput(String(d.ndRate))
-        if (d.globalNdDisc != null) setGlobalNdDisc(d.globalNdDisc)
-        if (d.qRecent) setQRecent(d.qRecent)
-        const names = Object.keys(d.items || {})
-        if (names.length) { setSelItem(names[0]); setPage("item") }
+        if (d.globalNdDisc) setGlobalNdDisc(d.globalNdDisc)
+        if (d.qRecent?.length) setQRecent(d.qRecent)
+        // Restore navigation state from localStorage
+        try {
+          const nav = JSON.parse(localStorage.getItem("nostale-nav"))
+          if (nav?.selItem && d.items?.[nav.selItem]) {
+            setSelItem(nav.selItem); setPage(nav.page || "item"); setSubPage(nav.subPage || "prices")
+          } else {
+            const names = Object.keys(d.items || {})
+            if (names.length) { setSelItem(names[0]); setPage("item") }
+          }
+        } catch {
+          const names = Object.keys(d.items || {})
+          if (names.length) { setSelItem(names[0]); setPage("item") }
+        }
       } catch (err) {
         console.error("Load failed:", err)
         setData(mkInit())
@@ -438,9 +507,26 @@ export default function App() {
     setShowTargetEdit(false)
   }, [selItem])
 
+  /* ── MERGED CUSTOMIZABLES ── */
+  const allCategories = useMemo(() => {
+    const customs = data?.customCategories || []
+    return [...CATEGORIES, ...customs.filter(c => !CATEGORIES.includes(c))]
+  }, [data?.customCategories])
+
+  const allEvents = useMemo(() => [...EVENTS, ...(data?.customEvents || [])], [data?.customEvents])
+  const allEVT = useMemo(() => Object.fromEntries(allEvents.map(e => [e.id, e])), [allEvents])
+
+  const allNdDiscounts = useMemo(() => {
+    const customs = data?.customNdDiscounts || []
+    return [...new Set([...ND_DISCOUNTS, ...customs])].sort((a, b) => a - b)
+  }, [data?.customNdDiscounts])
+
+  const trendDays = data?.trendDays || 7
+  const lotStrategy = data?.lotStrategy || "fifo"
+
   /* ── CURRENT EVENT ── */
   const curEventId = data?.events?.[todayStr()] || "none"
-  const curEvt     = EVT[curEventId]
+  const curEvt     = allEVT[curEventId] || EVT.none
   const setCurEvt  = id => upd({ ...data, events: { ...data.events, [todayStr()]: id } })
 
   /* ── ITEM HELPERS ── */
@@ -555,7 +641,7 @@ export default function App() {
         min:       Math.min(...vals),
         max:       Math.max(...vals),
         hasEvent:  data.events?.[d] && data.events[d] !== "none",
-        eventColor: data.events?.[d] ? EVT[data.events[d]]?.color : undefined,
+        eventColor: data.events?.[d] ? allEVT[data.events[d]]?.color : undefined,
       }
     }).filter(Boolean)
   }, [prices, allDays, data, selItem])
@@ -592,7 +678,7 @@ export default function App() {
   /* ── LOT PREVIEW for listing form ── */
   const lotPreview = useMemo(() => {
     if (!lsQty || isNaN(parseInt(lsQty, 10)) || parseInt(lsQty, 10) <= 0) return null
-    return matchLotsForQty(lots, parseInt(lsQty, 10))
+    return matchLotsForQty(lots, parseInt(lsQty, 10), lotStrategy)
   }, [lots, lsQty])
 
   /* ── CAPITAL OVERVIEW ── */
@@ -633,7 +719,8 @@ export default function App() {
     const totalValue = rows.reduce((a,r) => a + r.listing.qty * r.listing.listPrice, 0)
     const totalTax   = rows.reduce((a,r) => a + (r.listing.tax || 0), 0)
     const totalProfit = rows.reduce((a,r) => a + (r.profit || 0), 0)
-    return { rows, totalQty, totalValue, totalTax, totalProfit }
+    const totalCost = rows.reduce((a,r) => a + (r.listing.buyPrice != null ? r.listing.buyPrice * (r.listing.coveredQty || r.listing.qty) : 0), 0)
+    return { rows, totalQty, totalValue, totalTax, totalProfit, totalCost }
   }, [data])
 
   /* ── MAGAZZINO OVERVIEW — all open lots across items with aging ── */
@@ -761,6 +848,41 @@ export default function App() {
     return { byItem, capitalChart }
   }, [data])
 
+  /* ── SELL TIME DATA (extracted from IIFE) ── */
+  const sellTimeData = useMemo(() => {
+    const rows = performanceAnalytics.byItem
+      .filter(r => r.avgSell != null)
+      .map(r => ({ name: r.name, days: r.avgSell, ms: r.avgSell * 86400000 }))
+      .sort((a, b) => b.days - a.days)
+    if (!rows.length) return null
+    const avgDays = rows.reduce((a, r) => a + r.days, 0) / rows.length
+    const chartData = rows.map(r => ({ name: r.name, giorni: Math.round(r.days * 10) / 10 }))
+    return { rows, avgDays, chartData }
+  }, [performanceAnalytics])
+
+  /* ── STAGING TIME DATA (extracted from IIFE) ── */
+  const stagingTimeData = useMemo(() => {
+    if (!magazzinoOverview.rows.length) return null
+    const stagingMap = {}
+    const stagingAll = {}
+    for (const r of magazzinoOverview.rows) {
+      if (!stagingAll[r.name]) stagingAll[r.name] = []
+      stagingAll[r.name].push(r.ageDays)
+      if (!stagingMap[r.name] || r.ageDays > stagingMap[r.name].ageDays) {
+        stagingMap[r.name] = { name: r.name, ageDays: r.ageDays, ageMs: Date.now() - new Date(r.lot.timestamp).getTime() }
+      }
+    }
+    const rows = Object.values(stagingMap).map(r => {
+      const all = stagingAll[r.name]
+      const avg = all.reduce((a, b) => a + b, 0) / all.length
+      return { ...r, avgDays: avg }
+    }).sort((a, b) => b.ageDays - a.ageDays)
+    if (!rows.length) return null
+    const globalAvg = rows.reduce((a, r) => a + r.ageDays, 0) / rows.length
+    const chartData = rows.map(r => ({ name: r.name, giorni: Math.round(r.ageDays * 10) / 10, media: Math.round(r.avgDays * 10) / 10 }))
+    return { rows, globalAvg, chartData }
+  }, [magazzinoOverview])
+
   /* ── NOS DOLLARI — items with category "Item Shop ND" ── */
   const ndItems = useMemo(() => {
     if (!data) return []
@@ -781,6 +903,10 @@ export default function App() {
         const profit    = revenue != null && costGold > 0 ? revenue - costGold : null
         return { name, ndCost, ndQty, disc, useCost, marketPrice, costGold, revenue, profit }
       })
+    const profitable = list.filter(r => r.profit != null && r.profit > 0).length
+    const losing     = list.filter(r => r.profit != null && r.profit < 0).length
+    const best       = list.filter(r => r.profit != null).sort((a,b) => b.profit - a.profit)[0]
+    return Object.assign(list, { profitable, losing, bestProfit: best ? best.profit : null })
   }, [data, globalNdDisc])
 
   /* ── ANALISI ROWS ── */
@@ -816,7 +942,7 @@ export default function App() {
         ? soldL.reduce((a,l) => a + (new Date(l.soldAt) - new Date(l.listedAt)), 0) / soldL.length
         : null
 
-      const trend7 = calcTrend(ps)
+      const trend7 = calcTrend(ps, trendDays)
       const vol    = calcVolatility(ps)
       return { name, current, signal, stockQty, stockValue, bazarQty, bazarValue, roiPct, avgSellMs, totalProfit, priceCount: ps.length, trend7, vol }
     })
@@ -834,7 +960,7 @@ export default function App() {
       const isEsaurito = lastEntry?.esaurito === true
       const realPs     = ps.filter(p => !p.esaurito)
       const last       = realPs[realPs.length-1]?.price
-      const t7         = calcTrend(ps)
+      const t7         = calcTrend(ps, trendDays)
       const trend      = t7 ? (t7.pct > 0.5 ? "▲" : t7.pct < -0.5 ? "▼" : "—") : null
       const tColor     = trend === "▲" ? C.green : trend === "▼" ? C.red : "#4b5563"
       const openQty    = calcOpenQty(it)
@@ -955,7 +1081,7 @@ export default function App() {
     const listP = parseG(lsPrice)
     const tax   = lsTax.trim() ? parseG(lsTax) : 0
     if (!selItem || isNaN(qty) || qty <= 0 || isNaN(listP) || listP <= 0) return
-    const match = matchLotsForQty(lots, qty)
+    const match = matchLotsForQty(lots, qty, lotStrategy)
     const hasLots = match.links && match.links.length > 0
     const entry = { qty, listPrice: Math.round(listP), buyPrice: match.avgBuyPrice, coveredQty: match.coveredQty, totalCost: match.totalCost, lotLinks: match.links, listedAt: new Date().toISOString(), tax: isNaN(tax) ? 0 : Math.round(tax), sold: false, soldAt: null, lotsConsumed: hasLots }
     // Consume lots from warehouse immediately (FIFO)
@@ -1147,7 +1273,7 @@ export default function App() {
       const avgMs      = sellTimes.length ? sellTimes.reduce((a,b)=>a+b,0)/sellTimes.length : null
       const buyT   = it.meta?.buyTarget
       const sellT  = it.meta?.sellTarget
-      const trend7 = calcTrend(ps)
+      const trend7 = calcTrend(ps, trendDays)
       return { name, it, ps, ls, lsList, sig, last, prev, trend, tCol, openQty, spent, estProfit, activeQtyL, avgMs, buyT, sellT, trend7 }
     })
   }, [data, itemNames])
@@ -1200,6 +1326,9 @@ export default function App() {
         <span style={{ fontSize:19 }}>⚔️</span>
         <span style={{ color:C.gold, fontWeight:700, letterSpacing:2, fontSize:17 }}>NOSTALE TRACKER</span>
         <span style={{ color:C.muted, fontSize:12, letterSpacing:1 }}>v{appVersion}</span>
+        {saveStatus === "error" && <span style={{ color:C.red, fontSize:11, fontWeight:700, animation:"blink 1s infinite", WebkitAppRegion:"no-drag" }}>⚠ ERRORE SALVATAGGIO</span>}
+        {saveStatus === "saving" && <span style={{ color:C.gold, fontSize:11, WebkitAppRegion:"no-drag" }}>💾</span>}
+        {saveStatus === "ok" && <span style={{ color:C.green, fontSize:11, WebkitAppRegion:"no-drag" }}>✓</span>}
 
         <button onClick={()=>setPage("analisi")} title="Analisi comparativa item"
           style={{ background:page==="analisi"?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${page==="analisi"?C.gold:"#e8a83855"}`, borderRadius:7, color:page==="analisi"?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
@@ -1269,7 +1398,7 @@ export default function App() {
               <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addItem()} placeholder="es. Amuleto Elementale" style={inp()}/>
               <div style={{ fontSize:12, color:C.muted, letterSpacing:3 }}>CATEGORIA</div>
               <select value={newCat} onChange={e=>setNewCat(e.target.value)} style={inp()}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <button onClick={addItem} disabled={!newName.trim()} style={{ ...pill(!!newName.trim()), marginTop:4, padding:"10px" }}>AGGIUNGI ITEM</button>
             </div>
@@ -1288,7 +1417,7 @@ export default function App() {
                 </div>
                 <select value={sideCategory} onChange={e=>setSideCategory(e.target.value)} style={inp({ padding:"4px 7px", fontSize:12 })}>
                   <option value="__all__">Tutte le categorie</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div style={{ flex:1, overflowY:"auto", padding:"5px 7px", display:"flex", flexDirection:"column", gap:2 }}>
@@ -1346,20 +1475,12 @@ export default function App() {
 
               {/* ── CAPITAL OVERVIEW ── */}
               {capitalOverview && (capitalOverview.inStock > 0 || capitalOverview.atMarket > 0 || capitalOverview.realized !== 0) && (
-                <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
-                  {[
+                <StatBar items={[
                     { l:"💰 INVESTITO IN STOCK",   v:fmtG(capitalOverview.inStock),   c:C.blue,  sub:"magazzino totale"           },
                     { l:"🏷️ AL BAZAR",              v:fmtG(capitalOverview.atMarket),  c:C.gold,  sub:"listing attivi"             },
                     { l:"✅ PROFITTO REALIZZATO",   v:fmtG(capitalOverview.realized),  c:capitalOverview.realized>=0?C.green:C.red, sub:"da vendite chiuse" },
                     { l:"📦 ITEM TRACCIATI",        v:capitalOverview.totalItems + " item", c:C.text, sub:"in portafoglio" },
-                  ].map(s => (
-                    <div key={s.l} style={{ flex:"1 1 130px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px" }}>
-                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:4 }}>{s.l}</div>
-                      <div style={{ fontSize:18, color:s.c, fontWeight:700, fontFamily:"monospace" }}>{s.v}</div>
-                      <div style={{ fontSize:11, color:"#6b7a96", marginTop:3 }}>{s.sub}</div>
-                    </div>
-                  ))}
-                </div>
+                ]}/>
               )}
 
               {itemNames.length === 0 ? (
@@ -1550,22 +1671,14 @@ export default function App() {
             <div className="up">
               <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:16 }}>🏷️ BAZAR — LISTING ATTIVI</div>
 
-              {/* stat bar */}
               {bazarOverview.rows.length > 0 && (
-                <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
-                  {[
+                <StatBar items={[
                     { l:"SLOT ATTIVE",     v:bazarOverview.rows.length + "",       c:C.gold  },
-                    { l:"COSTO TOTALE SLOT", v:fmtG(bazarOverview.rows.reduce((a,r) => a + (r.listing.buyPrice != null ? r.listing.buyPrice * (r.listing.coveredQty || r.listing.qty) : 0), 0)), c:C.red },
+                    { l:"COSTO TOTALE SLOT", v:fmtG(bazarOverview.totalCost),      c:C.red },
                     { l:"VALORE AL BAZAR", v:fmtG(bazarOverview.totalValue),       c:C.gold  },
                     { l:"TASSE TOTALI",    v:fmtG(bazarOverview.totalTax),         c:C.red   },
                     { l:"PROFITTO ATTESO", v:fmtG(bazarOverview.totalProfit),      c:bazarOverview.totalProfit>=0?C.green:C.red },
-                  ].map(s => (
-                    <div key={s.l} style={{ flex:"1 1 100px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 13px" }}>
-                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
-                      <div style={{ fontSize:17, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
-                    </div>
-                  ))}
-                </div>
+                ]}/>
               )}
 
               {bazarOverview.rows.length === 0 ? (
@@ -1646,15 +1759,7 @@ export default function App() {
               {performanceAnalytics.byItem.length > 0 && (<>
 
                 {/* Sell Time per Item — table + chart */}
-                {(() => {
-                  const sellRows = performanceAnalytics.byItem
-                    .filter(r => r.avgSell != null)
-                    .map(r => ({ name: r.name, days: r.avgSell, ms: r.avgSell * 86400000 }))
-                    .sort((a, b) => b.days - a.days)
-                  if (!sellRows.length) return null
-                  const avgDays = sellRows.reduce((a, r) => a + r.days, 0) / sellRows.length
-                  const chartData = sellRows.map(r => ({ name: r.name, giorni: Math.round(r.days * 10) / 10 }))
-                  return (
+                {sellTimeData && (
                     <div style={{ marginTop:20 }}>
                       <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO DI VENDITA — BAZAR → VENDUTO</div>
                       <div style={{ display:"flex", gap:16 }}>
@@ -1664,7 +1769,7 @@ export default function App() {
                             <div style={{ flex:1 }}>ITEM</div>
                             <div style={{ width:120, textAlign:"right" }}>DURATA</div>
                           </div>
-                          {sellRows.map(r => {
+                          {sellTimeData.rows.map(r => {
                             const col = r.days >= 7 ? C.red : r.days >= 3 ? C.gold : C.green
                             return (
                               <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"7px 10px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
@@ -1674,26 +1779,25 @@ export default function App() {
                             )
                           })}
                           <div style={{ fontSize:11, color:C.muted, marginTop:4, textAlign:"right", paddingRight:10 }}>
-                            Media: <b style={{ color:C.gold }}>{fmtAge(avgDays * 86400000)}</b>
+                            Media: <b style={{ color:C.gold }}>{fmtAge(sellTimeData.avgDays * 86400000)}</b>
                           </div>
                         </div>
                         {/* Chart right */}
                         <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300 }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, sellRows.length * 45)}>
-                            <BarChart data={chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
+                          <ResponsiveContainer width="100%" height={Math.max(400, sellTimeData.rows.length * 45)}>
+                            <BarChart data={sellTimeData.chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
                               <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
                               <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
                               <YAxis stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
                               <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v) => [v + "g", "Durata"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
                               <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Durata"/>
-                              <ReferenceLine y={Math.round(avgDays * 10) / 10} stroke={C.red} strokeWidth={2} strokeDasharray="6 3" label={{ value:`Media: ${(Math.round(avgDays * 10) / 10)}g`, fill:C.red, fontSize:11, position:"insideTopRight" }}/>
+                              <ReferenceLine y={Math.round(sellTimeData.avgDays * 10) / 10} stroke={C.red} strokeWidth={2} strokeDasharray="6 3" label={{ value:`Media: ${(Math.round(sellTimeData.avgDays * 10) / 10)}g`, fill:C.red, fontSize:11, position:"insideTopRight" }}/>
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
                       </div>
                     </div>
-                  )
-                })()}
+                )}
 
               </>)}
             </div>
@@ -1706,19 +1810,12 @@ export default function App() {
 
               {/* stat bar */}
               {magazzinoOverview.rows.length > 0 && (
-                <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap" }}>
-                  {[
+                <StatBar items={[
                     { l:"ITEM IN STOCK",     v:magazzinoOverview.itemCount + " item / " + magazzinoOverview.rows.length + " slot", c:C.blue },
                     { l:"INVESTITO",         v:fmtG(magazzinoOverview.totalSpent),             c:C.red   },
                     { l:"VALORE STIMATO",    v:fmtG(magazzinoOverview.totalEstValue),          c:C.gold  },
                     { l:"PROFITTO STIMATO",  v:fmtG(magazzinoOverview.totalEstProfit),         c:magazzinoOverview.totalEstProfit>=0?C.green:C.red },
-                  ].map(s => (
-                    <div key={s.l} style={{ flex:"1 1 100px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 13px" }}>
-                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
-                      <div style={{ fontSize:17, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
-                    </div>
-                  ))}
-                </div>
+                ]}/>
               )}
 
               {magazzinoOverview.rows.length === 0 ? (
@@ -1794,26 +1891,7 @@ export default function App() {
                 )}
 
                 {/* Staging Time per Item — oldest open lot age */}
-                {(() => {
-                  // Group open lots by item, get oldest + average lot age per item
-                  const stagingMap = {}
-                  const stagingAll = {}
-                  for (const r of magazzinoOverview.rows) {
-                    if (!stagingAll[r.name]) stagingAll[r.name] = []
-                    stagingAll[r.name].push(r.ageDays)
-                    if (!stagingMap[r.name] || r.ageDays > stagingMap[r.name].ageDays) {
-                      stagingMap[r.name] = { name: r.name, ageDays: r.ageDays, ageMs: Date.now() - new Date(r.lot.timestamp).getTime() }
-                    }
-                  }
-                  const stagingRows = Object.values(stagingMap).map(r => {
-                    const all = stagingAll[r.name]
-                    const avg = all.reduce((a, b) => a + b, 0) / all.length
-                    return { ...r, avgDays: avg }
-                  }).sort((a, b) => b.ageDays - a.ageDays)
-                  if (!stagingRows.length) return null
-                  const globalAvg = stagingRows.reduce((a, r) => a + r.ageDays, 0) / stagingRows.length
-                  const chartData = stagingRows.map(r => ({ name: r.name, giorni: Math.round(r.ageDays * 10) / 10, media: Math.round(r.avgDays * 10) / 10 }))
-                  return (
+                {stagingTimeData && (
                     <div style={{ marginTop:20 }}>
                       <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>⏱ TEMPO IN MAGAZZINO — DA QUANTO TEMPO STAI TENENDO STOCK</div>
                       <div style={{ display:"flex", gap:16 }}>
@@ -1823,7 +1901,7 @@ export default function App() {
                             <div style={{ flex:1 }}>ITEM</div>
                             <div style={{ width:120, textAlign:"right" }}>TEMPO</div>
                           </div>
-                          {stagingRows.map(r => {
+                          {stagingTimeData.rows.map(r => {
                             const col = r.ageDays >= 7 ? C.red : r.ageDays >= 3 ? C.gold : C.green
                             return (
                               <div key={r.name} className="r" style={{ display:"flex", alignItems:"center", padding:"7px 10px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:7 }}>
@@ -1833,13 +1911,13 @@ export default function App() {
                             )
                           })}
                           <div style={{ fontSize:11, color:C.muted, marginTop:4, textAlign:"right", paddingRight:10 }}>
-                            Media globale: <b style={{ color:C.gold }}>{fmtAge(globalAvg * 86400000)}</b>
+                            Media globale: <b style={{ color:C.gold }}>{fmtAge(stagingTimeData.globalAvg * 86400000)}</b>
                           </div>
                         </div>
                         {/* Chart right */}
                         <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300 }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, stagingRows.length * 45)}>
-                            <BarChart data={chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
+                          <ResponsiveContainer width="100%" height={Math.max(400, stagingTimeData.rows.length * 45)}>
+                            <BarChart data={stagingTimeData.chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
                               <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
                               <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
                               <YAxis stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
@@ -1852,8 +1930,7 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  )
-                })()}
+                )}
 
 
               </>)}
@@ -1903,7 +1980,7 @@ export default function App() {
                 <div style={{ flex:"0 0 200px", background:C.panel, border:`1px solid ${globalNdDisc>0?"#f59e0b":C.border}`, borderRadius:10, padding:"14px 16px", transition:"all .15s" }}>
                   <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:6 }}>SCONTO EVENTO</div>
                   <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
-                    {ND_DISCOUNTS.map(d => (
+                    {allNdDiscounts.map(d => (
                       <button key={d} onClick={()=>{ setGlobalNdDisc(d); upd({ ...data, globalNdDisc: d }) }}
                         style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?"#f59e0b":C.border):C.border}`, background:globalNdDisc===d?(d>0?"rgba(245,158,11,.18)":"rgba(255,255,255,.05)"):"transparent", color:globalNdDisc===d?(d>0?"#f59e0b":C.text):C.muted }}>
                         {d === 0 ? "OFF" : `-${d}%`}
@@ -1923,19 +2000,12 @@ export default function App() {
               ) : (<>
                 {/* summary */}
                 {data?.ndRate > 0 && (
-                  <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
-                    {[
-                      { l:"ITEM ND",        v:ndItems.length + "",                                                 c:C.text  },
-                      { l:"PROFITTEVOLI",   v:ndItems.filter(r=>r.profit!=null&&r.profit>0).length + "",           c:C.green },
-                      { l:"IN PERDITA",     v:ndItems.filter(r=>r.profit!=null&&r.profit<0).length + "",           c:C.red   },
-                      { l:"MIGLIOR PROFITTO", v:(() => { const best = ndItems.filter(r=>r.profit!=null).sort((a,b)=>b.profit-a.profit)[0]; return best ? fmtG(best.profit) : "—" })(), c:C.green },
-                    ].map(s => (
-                      <div key={s.l} style={{ flex:"1 1 100px", background:C.panel, border:`1px solid ${C.border}`, borderRadius:9, padding:"9px 13px" }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
-                        <div style={{ fontSize:16, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
-                      </div>
-                    ))}
-                  </div>
+                  <StatBar mb={14} items={[
+                      { l:"ITEM ND",          v:ndItems.length + "",                                    c:C.text  },
+                      { l:"PROFITTEVOLI",     v:ndItems.profitable + "",                               c:C.green },
+                      { l:"IN PERDITA",       v:ndItems.losing + "",                                   c:C.red   },
+                      { l:"MIGLIOR PROFITTO", v:ndItems.bestProfit != null ? fmtG(ndItems.bestProfit) : "—", c:C.green },
+                  ]}/>
                 )}
 
                 {/* header */}
@@ -2002,7 +2072,7 @@ export default function App() {
                               const updated = { ...it, meta: { ...it.meta, ndDiscount: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
                             }} style={{ background:"#1c1f2e", border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?"#f59e0b":C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
-                              {ND_DISCOUNTS.map(d => <option key={d} value={d}>{d===0?"—":`-${d}%`}</option>)}
+                              {allNdDiscounts.map(d => <option key={d} value={d}>{d===0?"—":`-${d}%`}</option>)}
                             </select>
                             {(it.meta?.ndDiscount||0) > 0 && it.meta?.ndCost > 0 && (
                               <span style={{ fontSize:11, color:"#f59e0b", fontFamily:"monospace" }}>= {Math.ceil(it.meta.ndCost * (1 - (it.meta.ndDiscount)/100))} ND</span>
@@ -2061,7 +2131,7 @@ export default function App() {
                           upd({ ...data, items: { ...data.items, [selItem]: it } })
                         }}
                         style={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, padding:"2px 6px", fontSize:11, cursor:"pointer" }}>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c === "—" ? "Nessuna categoria" : c}</option>)}
+                        {allCategories.map(c => <option key={c} value={c}>{c === "—" ? "Nessuna categoria" : c}</option>)}
                       </select>
                     </div>
                   </div>
@@ -2148,7 +2218,7 @@ export default function App() {
 
               {/* ── STATS BAR ── */}
               {allStats && (() => {
-                const trend7 = calcTrend(prices)
+                const trend7 = calcTrend(prices, trendDays)
                 const vol    = calcVolatility(prices)
                 const primary = [
                   { l: allStats.isEsaurito ? "ULTIMO PREZZO NOTO" : "PREZZO ATTUALE", v:fmtG(allStats.current), c:allStats.isEsaurito?"#a78bfa":C.gold, big:true },
@@ -2254,7 +2324,7 @@ export default function App() {
                     {[...prices].reverse().map((p, ri) => {
                       const stableKey = p.timestamp || ri
                       const realIdx = prices.length - 1 - ri
-                      const ev      = EVT[p.eventId] || EVT.none
+                      const ev      = allEVT[p.eventId] || EVT.none
                       // Trova il prezzo reale precedente (esclude esaurito)
                       const prevReal = prices.slice(0, realIdx).reverse().find(x => !x.esaurito)
                       const delta    = (!p.esaurito && prevReal) ? p.price - prevReal.price : null
@@ -2344,7 +2414,7 @@ export default function App() {
                       {lots.filter(l=>!l.sold).length===0 && <div style={{ color:C.muted, fontSize:11, padding:"14px 0" }}>Nessun acquisto in stock</div>}
                       {lots.map((l, i) => {
                         if (l.sold) return null
-                        const ev = EVT[l.eventId] || EVT.none
+                        const ev = allEVT[l.eventId] || EVT.none
                         const currentP = prices.length ? prices[prices.length-1].price : null
                         const profit   = currentP ? (currentP - l.price) * l.qty : null
                         return (
@@ -2580,7 +2650,7 @@ export default function App() {
                     {allDays.length === 0 && <span style={{ fontSize:11, color:C.muted }}>Nessun dato ancora</span>}
                     {allDays.map(d => {
                       const evId = data.events?.[d]
-                      const ev   = evId && evId !== "none" ? EVT[evId] : null
+                      const ev   = evId && evId !== "none" ? allEVT[evId] : null
                       return (
                         <button key={d} onClick={()=>setChartDay(d)} style={pill(chartDay===d, ev?ev.color:C.gold, { padding:"5px 10px", fontSize:12 })}>
                           {d}{ev ? " "+ev.icon : ""}
@@ -2612,8 +2682,8 @@ export default function App() {
                     <div style={{ fontSize:11, color:C.muted, letterSpacing:3, marginBottom:12 }}>
                       INTRADAY — {chartDay}
                       {data.events?.[chartDay] && data.events[chartDay]!=="none" && (
-                        <span style={{ marginLeft:10, color:EVT[data.events[chartDay]]?.color }}>
-                          {EVT[data.events[chartDay]]?.icon} {EVT[data.events[chartDay]]?.label}
+                        <span style={{ marginLeft:10, color:allEVT[data.events[chartDay]]?.color }}>
+                          {allEVT[data.events[chartDay]]?.icon} {allEVT[data.events[chartDay]]?.label}
                         </span>
                       )}
                     </div>
@@ -2631,7 +2701,7 @@ export default function App() {
                             contentStyle={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:8, fontSize:12, color:C.text }}
                             labelStyle={{ color:C.muted }}
                             formatter={(v,_,p) => [
-                              `${v.toLocaleString("it-IT")} ori (${fmtG(v)})${p.payload.eventId&&p.payload.eventId!=="none"?" "+EVT[p.payload.eventId]?.icon:""}${p.payload.note?" — "+p.payload.note:""}`,
+                              `${v.toLocaleString("it-IT")} ori (${fmtG(v)})${p.payload.eventId&&p.payload.eventId!=="none"?" "+allEVT[p.payload.eventId]?.icon:""}${p.payload.note?" — "+p.payload.note:""}`,
                               "Prezzo"
                             ]}
                           />
@@ -2639,7 +2709,7 @@ export default function App() {
                             dot={(props) => {
                               const { cx, cy, payload } = props
                               const ev = payload.eventId && payload.eventId !== "none"
-                              const col = ev ? EVT[payload.eventId]?.color || C.gold : C.gold
+                              const col = ev ? allEVT[payload.eventId]?.color || C.gold : C.gold
                               return <circle key={`${cx}${cy}`} cx={cx} cy={cy} r={ev?7:4} fill={ev?col:C.panel} stroke={col} strokeWidth={2}/>
                             }}
                             activeDot={{ r:8, fill:C.gold }}
@@ -2700,8 +2770,9 @@ export default function App() {
             <div style={{ width:180, background:"#0f1119", borderRight:`1px solid ${C.border}`, padding:"20px 0", display:"flex", flexDirection:"column", gap:2, flexShrink:0 }}>
               <div style={{ padding:"0 16px 14px", fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2 }}>⚙️ SETTINGS</div>
               {[
-                { k:"salvataggio", l:"💾 Salvataggio" },
-                { k:"strategia",   l:"📊 Strategia"   },
+                { k:"salvataggio",    l:"💾 Salvataggio" },
+                { k:"strategia",      l:"📊 Strategia"   },
+                { k:"personalizza",   l:"🎨 Personalizza" },
               ].map(({ k, l }) => (
                 <div key={k} onClick={()=>setSettingsCategory(k)}
                   style={{ padding:"10px 16px", fontSize:13, color:settingsCategory===k?C.gold:C.muted, background:settingsCategory===k?"rgba(232,168,56,.1)":"transparent", borderLeft:`3px solid ${settingsCategory===k?C.gold:"transparent"}`, cursor:"pointer", transition:"all .15s", fontWeight:settingsCategory===k?700:400 }}>
@@ -2814,6 +2885,91 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* ── PERSONALIZZA ── */}
+              {settingsCategory === "personalizza" && (
+                <div className="up">
+                  <div style={{ fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2, marginBottom:20 }}>🎨 PERSONALIZZA</div>
+
+                  <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+                    {/* Trend days */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>GIORNI TREND</div>
+                      <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Numero di giorni usati per calcolare la tendenza dei prezzi.</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {[3, 5, 7, 14, 30].map(d => (
+                          <button key={d} onClick={() => upd({ ...data, trendDays: d })}
+                            style={pill(trendDays === d, C.gold, { padding:"7px 14px", fontSize:13 })}>
+                            {d} giorni
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Lot strategy */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>STRATEGIA LOTTI</div>
+                      <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Come vengono abbinati i lotti dal magazzino quando crei un listing al bazar.</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {LOT_STRATEGIES.map(s => (
+                          <button key={s.id} onClick={() => upd({ ...data, lotStrategy: s.id })}
+                            style={pill(lotStrategy === s.id, C.gold, { padding:"7px 14px", fontSize:13 })}>
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom categories */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>CATEGORIE PERSONALIZZATE</div>
+                      <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Aggiungi categorie extra oltre a quelle predefinite.</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+                        {(data?.customCategories || []).map(cat => (
+                          <span key={cat} style={{ display:"inline-flex", alignItems:"center", gap:6, background:C.panel, border:`1px solid ${C.border2}`, borderRadius:6, padding:"5px 10px", fontSize:12, color:C.text }}>
+                            {cat}
+                            <button onClick={() => upd({ ...data, customCategories: (data.customCategories || []).filter(c => c !== cat) })}
+                              style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:13, padding:0 }}>✕</button>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                        <input value={newCategoryInput} onChange={e => setNewCategoryInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { const v = newCategoryInput.trim(); if (v && !allCategories.includes(v)) { upd({ ...data, customCategories: [...(data.customCategories || []), v] }); setNewCategoryInput("") } } }}
+                          placeholder="Nuova categoria..." style={inp({ width:200, fontSize:13 })}/>
+                        <button onClick={() => { const v = newCategoryInput.trim(); if (v && !allCategories.includes(v)) { upd({ ...data, customCategories: [...(data.customCategories || []), v] }); setNewCategoryInput("") } }}
+                          style={pill(!!newCategoryInput.trim(), C.gold, { padding:"7px 14px", fontSize:12 })}>+ Aggiungi</button>
+                      </div>
+                    </div>
+
+                    {/* Custom ND discounts */}
+                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                      <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>SCONTI ND PERSONALIZZATI</div>
+                      <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Aggiungi percentuali di sconto extra per i NosDollari.</div>
+                      <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:10 }}>
+                        {allNdDiscounts.map(d => {
+                          const isCustom = !ND_DISCOUNTS.includes(d)
+                          return (
+                            <span key={d} style={{ display:"inline-flex", alignItems:"center", gap:4, background:isCustom ? "rgba(232,168,56,.1)" : C.panel, border:`1px solid ${isCustom ? C.gold + "55" : C.border2}`, borderRadius:6, padding:"4px 8px", fontSize:12, color:isCustom ? C.gold : C.muted }}>
+                              {d}%
+                              {isCustom && <button onClick={() => upd({ ...data, customNdDiscounts: (data.customNdDiscounts || []).filter(v => v !== d) })}
+                                style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:11, padding:0 }}>✕</button>}
+                            </span>
+                          )
+                        })}
+                      </div>
+                      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                        <input type="number" min="1" max="99" value={newNdDiscInput} onChange={e => setNewNdDiscInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(newNdDiscInput, 10); if (v > 0 && v < 100 && !allNdDiscounts.includes(v)) { upd({ ...data, customNdDiscounts: [...(data.customNdDiscounts || []), v] }); setNewNdDiscInput("") } } }}
+                          placeholder="es. 35" style={inp({ width:100, fontSize:13 })}/>
+                        <span style={{ fontSize:12, color:C.muted }}>%</span>
+                        <button onClick={() => { const v = parseInt(newNdDiscInput, 10); if (v > 0 && v < 100 && !allNdDiscounts.includes(v)) { upd({ ...data, customNdDiscounts: [...(data.customNdDiscounts || []), v] }); setNewNdDiscInput("") } }}
+                          style={pill(!!newNdDiscInput, C.gold, { padding:"7px 14px", fontSize:12 })}>+ Aggiungi</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2883,7 +3039,7 @@ export default function App() {
                   <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>EVENTO</div>
                   <select value={curEventId} onChange={e=>setCurEvt(e.target.value)}
                     style={{ ...inp(), fontSize:14, color:curEvt.color }}>
-                    {EVENTS.map(ev => <option key={ev.id} value={ev.id}>{ev.icon} {ev.label}</option>)}
+                    {allEvents.map(ev => <option key={ev.id} value={ev.id}>{ev.icon} {ev.label}</option>)}
                   </select>
                 </div>
               </div>
