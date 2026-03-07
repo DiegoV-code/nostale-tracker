@@ -282,7 +282,7 @@ export default function App() {
 
   // sidebar controls
   const [sideSort,     setSideSort]     = useState("name")   // name | price | signal
-  const [sideCategory, setSideCategory] = useState("—")
+  const [sideCategory, setSideCategory] = useState("__all__")
 
   // chart day
   const [chartDay, setChartDay] = useState(todayStr())
@@ -350,7 +350,10 @@ export default function App() {
         if (d.ndRate) setNdRateInput(String(d.ndRate))
         const names = Object.keys(d.items || {})
         if (names.length) { setSelItem(names[0]); setPage("item") }
-      } catch { setData(mkInit()) }
+      } catch (err) {
+        console.error("Load failed:", err)
+        setData(mkInit())
+      }
     })()
     // version + auto-update listeners
     window.api.getVersion?.().then(v => v && setAppVersion(v)).catch(() => {})
@@ -377,7 +380,22 @@ export default function App() {
   // Clear debounce timer on unmount
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
 
-  const upd = useCallback(nd => { setData(nd); persist(nd) }, [persist])
+  // Track latest data for flush-on-close
+  const dataRef = useRef(null)
+  const upd = useCallback(nd => { setData(nd); dataRef.current = nd; persist(nd) }, [persist])
+
+  // Flush pending save on window close
+  useEffect(() => {
+    const flush = () => {
+      if (saveTimer.current && dataRef.current) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        window.api.save(dataRef.current).catch(() => {})
+      }
+    }
+    window.addEventListener("beforeunload", flush)
+    return () => window.removeEventListener("beforeunload", flush)
+  }, [])
 
   // Reset form state when switching items
   useEffect(() => {
@@ -399,9 +417,18 @@ export default function App() {
   const prices    = item?.prices   || []
   const lots      = item?.lots     || []
   const listings  = item?.listings || []
+
+  /* ── SIGNAL CACHE ── */
+  const signalCache = useMemo(() => {
+    const cache = {}
+    for (const name of itemNames) {
+      cache[name] = getSignal(data?.items?.[name], data?.signalConfig)
+    }
+    return cache
+  }, [data, itemNames])
   const filtered  = useMemo(() => {
     let names = itemNames.filter(n => n.toLowerCase().includes(search.toLowerCase()))
-    if (sideCategory !== "—") names = names.filter(n => data?.items?.[n]?.meta?.category === sideCategory)
+    if (sideCategory !== "__all__") names = names.filter(n => (data?.items?.[n]?.meta?.category || "—") === sideCategory)
     if (sideSort === "price") {
       names = [...names].sort((a, b) => {
         const pa = (data?.items?.[a]?.prices || []).filter(p => !p.esaurito)
@@ -410,21 +437,19 @@ export default function App() {
       })
     } else if (sideSort === "signal") {
       const ord = { strong_buy:0, buy:1, buy_target:0, hold:2, esaurito:3, high:4, sell:5, overpriced:6, sell_target:5, nodata:7 }
-      names = [...names].sort((a, b) => (ord[getSignal(data?.items?.[a], data?.signalConfig).type]??7) - (ord[getSignal(data?.items?.[b], data?.signalConfig).type]??7))
+      names = [...names].sort((a, b) => (ord[signalCache[a]?.type]??7) - (ord[signalCache[b]?.type]??7))
     } else {
       names = [...names].sort((a, b) => a.localeCompare(b))
     }
     return names
-  }, [itemNames, search, sideCategory, sideSort, data])
+  }, [itemNames, search, sideCategory, sideSort, data, signalCache])
 
   /* ── PRICE ANALYTICS ── */
   const allDays = useMemo(() => {
     if (!prices.length) return []
     const s = new Set(prices.map(p => fmtDate(new Date(p.timestamp))))
-    return [...s].sort((a, b) => {
-      const parse = s => { const [d,m,y] = s.split("/"); return new Date(+y,+m-1,+d) }
-      return parse(b) - parse(a)
-    })
+    const parseDate = s => { const [d,m,y] = s.split("/"); return new Date(+y,+m-1,+d).getTime() }
+    return [...s].sort((a, b) => parseDate(b) - parseDate(a))
   }, [prices])
 
   const dayPrices = useMemo(() =>
@@ -737,7 +762,7 @@ export default function App() {
 
       const realPs     = ps.filter(p => !p.esaurito)
       const current    = realPs.length ? realPs[realPs.length-1].price : null
-      const signal     = getSignal(it, data?.signalConfig)
+      const signal     = signalCache[name] || getSignal(it, data?.signalConfig)
 
       const openLots   = ls.filter(l => !l.sold)
       const stockQty   = openLots.reduce((a,l) => a+l.qty, 0)
@@ -826,6 +851,7 @@ export default function App() {
   }
 
   const delPrice = idx => {
+    if (!window.confirm("Eliminare questa registrazione di prezzo?")) return
     const it = { ...data.items[selItem], prices: prices.filter((_,i) => i !== idx) }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
   }
@@ -854,6 +880,12 @@ export default function App() {
   }
 
   const delLot = idx => {
+    const lot = lots[idx]
+    // Warn if lot is linked to any active listing
+    const linkedListings = listings.filter(l => !l.sold && l.lotLinks?.some(lk => lk.lotId === lot.id))
+    if (linkedListings.length > 0) {
+      if (!window.confirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
+    }
     const it = { ...data.items[selItem], lots: lots.filter((_,i) => i !== idx) }
     upd({ ...data, items: { ...data.items, [selItem]: it } })
   }
@@ -914,67 +946,10 @@ export default function App() {
     setLsQty(""); setLsPrice(""); setLsTax("")
   }
 
-  const markListingSold = (idx, soldQty) => {
-    const listing = listings[idx]
-    const isFullSale = !soldQty || soldQty >= listing.qty
-
-    if (isFullSale) {
-      // Full sale — mark entire listing as sold
-      const updatedLots = lots.map(l => ({ ...l }))
-      if (!listing.lotsConsumed && listing.lotLinks) {
-        for (const link of listing.lotLinks) {
-          const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
-          if (lotIdx !== -1) {
-            if (link.qty >= updatedLots[lotIdx].qty) updatedLots[lotIdx].sold = true
-            else updatedLots[lotIdx].qty -= link.qty
-          }
-        }
-      }
-      const updatedListings = listings.map((l,i) => i === idx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
-      const it = { ...data.items[selItem], lots: updatedLots, listings: updatedListings }
-      upd({ ...data, items: { ...data.items, [selItem]: it } })
-    } else {
-      // Partial sale — split listing into sold portion + remaining
-      const proportionalTax = listing.tax ? Math.round(listing.tax * soldQty / listing.qty) : 0
-      const soldCovered = Math.min(soldQty, listing.coveredQty || 0)
-      const soldEntry = {
-        qty: soldQty, listPrice: listing.listPrice, buyPrice: listing.buyPrice,
-        coveredQty: soldCovered, totalCost: listing.buyPrice ? listing.buyPrice * soldCovered : 0,
-        lotLinks: null, listedAt: listing.listedAt, tax: proportionalTax,
-        sold: true, soldAt: new Date().toISOString(), lotsConsumed: false
-      }
-      // Reduce lotLinks on remaining listing (FIFO)
-      let newLinks = listing.lotLinks ? listing.lotLinks.map(lk => ({...lk})) : []
-      let rem = soldQty
-      for (let i = 0; i < newLinks.length && rem > 0; i++) {
-        const take = Math.min(newLinks[i].qty, rem)
-        newLinks[i].qty -= take
-        rem -= take
-      }
-      newLinks = newLinks.filter(lk => lk.qty > 0)
-      const remainingCovered = Math.max(0, (listing.coveredQty || 0) - soldQty)
-      const updatedListing = {
-        ...listing, qty: listing.qty - soldQty, coveredQty: remainingCovered,
-        lotLinks: newLinks, totalCost: newLinks.reduce((a, lk) => a + lk.qty * lk.unitPrice, 0),
-        tax: (listing.tax || 0) - proportionalTax
-      }
-      const updatedListings = [...listings]
-      updatedListings[idx] = updatedListing
-      updatedListings.push(soldEntry)
-      const it = { ...data.items[selItem], listings: updatedListings }
-      upd({ ...data, items: { ...data.items, [selItem]: it } })
-    }
-    setPartialIdx(null)
-    setPartialQty("")
-  }
-
-  const markBazarListingSold = (itemName, listingIdx, soldQty) => {
-    const it = data.items[itemName]
-    if (!it) return
-    const allListings = it.listings || []
-    const allLots = it.lots || []
-    const listing = allListings[listingIdx]
-    if (!listing || listing.sold) return
+  // Shared logic for marking a listing as sold (full or partial)
+  const processListingSold = (itemName, allLots, allListings, idx, soldQty) => {
+    const listing = allListings[idx]
+    if (!listing || listing.sold) return null
     const isFullSale = !soldQty || soldQty >= listing.qty
 
     if (isFullSale) {
@@ -988,8 +963,8 @@ export default function App() {
           }
         }
       }
-      const updatedListings = allListings.map((l,i) => i === listingIdx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
-      upd({ ...data, items: { ...data.items, [itemName]: { ...it, lots: updatedLots, listings: updatedListings } } })
+      const updatedListings = allListings.map((l,i) => i === idx ? { ...l, sold: true, soldAt: new Date().toISOString() } : l)
+      return { lots: updatedLots, listings: updatedListings }
     } else {
       const proportionalTax = listing.tax ? Math.round(listing.tax * soldQty / listing.qty) : 0
       const soldCovered = Math.min(soldQty, listing.coveredQty || 0)
@@ -1014,10 +989,27 @@ export default function App() {
         tax: (listing.tax || 0) - proportionalTax
       }
       const updatedListings = [...allListings]
-      updatedListings[listingIdx] = updatedListing
+      updatedListings[idx] = updatedListing
       updatedListings.push(soldEntry)
-      upd({ ...data, items: { ...data.items, [itemName]: { ...it, listings: updatedListings } } })
+      return { lots: allLots.map(l => ({ ...l })), listings: updatedListings }
     }
+  }
+
+  const markListingSold = (idx, soldQty) => {
+    const result = processListingSold(selItem, lots, listings, idx, soldQty)
+    if (!result) return
+    const it = { ...data.items[selItem], lots: result.lots, listings: result.listings }
+    upd({ ...data, items: { ...data.items, [selItem]: it } })
+    setPartialIdx(null)
+    setPartialQty("")
+  }
+
+  const markBazarListingSold = (itemName, listingIdx, soldQty) => {
+    const it = data.items[itemName]
+    if (!it) return
+    const result = processListingSold(itemName, it.lots || [], it.listings || [], listingIdx, soldQty)
+    if (!result) return
+    upd({ ...data, items: { ...data.items, [itemName]: { ...it, lots: result.lots, listings: result.listings } } })
     setBazarPartialKey(null)
     setBazarPartialQty("")
   }
@@ -1031,8 +1023,11 @@ export default function App() {
         const lotIdx = updatedLots.findIndex(l => l.id === link.lotId)
         if (lotIdx !== -1) {
           if (updatedLots[lotIdx].sold) {
+            // Lot was fully consumed — restore it with the linked qty
             updatedLots[lotIdx].sold = false
+            updatedLots[lotIdx].qty = link.qty
           } else {
+            // Lot was partially consumed — add back the linked qty
             updatedLots[lotIdx].qty += link.qty
           }
         }
@@ -1060,8 +1055,8 @@ export default function App() {
     upd(nd)
     setQRecent(r => [{ name: qItem, price: Math.round(price), ts: new Date().toISOString() }, ...r].slice(0, 12))
     setQPrice("")
-    // Auto-advance to next item
-    const names = Object.keys(nd.items || {})
+    // Auto-advance to next item (alphabetical)
+    const names = Object.keys(nd.items || {}).sort((a,b) => a.localeCompare(b))
     const curIdx = names.indexOf(qItem)
     if (curIdx >= 0 && curIdx < names.length - 1) {
       const nextName = names[curIdx + 1]
@@ -1094,6 +1089,36 @@ export default function App() {
     const r = await window.api.exportCsv({ name: selItem, entries: prices.filter(p => !p.esaurito) })
     if (r.ok) alert(`Esportato: ${r.path}`)
   }
+
+  /* ── DASHBOARD CARDS (memoized) ── */
+  const dashboardCards = useMemo(() => {
+    if (!data) return []
+    return itemNames.map(name => {
+      const it      = data.items[name]
+      const ps      = it.prices || []
+      const ls      = it.lots   || []
+      const lsList  = it.listings || []
+      const sig     = signalCache[name] || getSignal(it, data?.signalConfig)
+      const realPs  = ps.filter(p => !p.esaurito)
+      const last    = realPs.length ? realPs[realPs.length-1].price : null
+      const prev    = realPs.length >= 2 ? realPs[realPs.length-2].price : null
+      const trend   = last!=null&&prev!=null ? (last>prev?"▲":last<prev?"▼":"—") : null
+      const tCol    = trend==="▲"?C.green:trend==="▼"?C.red:C.muted
+      const openLots  = ls.filter(l=>!l.sold)
+      const openQty   = openLots.reduce((a,l)=>a+l.qty,0)
+      const spent     = openLots.reduce((a,l)=>a+l.qty*l.price,0)
+      const estProfit = last!=null&&openQty>0 ? openQty*last - spent : null
+      const activeL   = lsList.filter(l=>!l.sold)
+      const soldL     = lsList.filter(l=>l.sold)
+      const activeQtyL = activeL.reduce((a,l)=>a+l.qty,0)
+      const sellTimes  = soldL.map(l=>new Date(l.soldAt)-new Date(l.listedAt))
+      const avgMs      = sellTimes.length ? sellTimes.reduce((a,b)=>a+b,0)/sellTimes.length : null
+      const buyT   = it.meta?.buyTarget
+      const sellT  = it.meta?.sellTarget
+      const trend7 = calcTrend(ps)
+      return { name, it, ps, ls, lsList, sig, last, prev, trend, tCol, openQty, spent, estProfit, activeQtyL, avgMs, buyT, sellT, trend7 }
+    })
+  }, [data, itemNames])
 
   /* ── SORTED ANALYSIS ROWS ── */
   const sortedAnalysis = useMemo(() => {
@@ -1234,7 +1259,8 @@ export default function App() {
                   ))}
                 </div>
                 <select value={sideCategory} onChange={e=>setSideCategory(e.target.value)} style={inp({ padding:"4px 7px", fontSize:12 })}>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c === "—" ? "Tutte le categorie" : c}</option>)}
+                  <option value="__all__">Tutte le categorie</option>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div style={{ flex:1, overflowY:"auto", padding:"5px 7px", display:"flex", flexDirection:"column", gap:2 }}>
@@ -1246,7 +1272,7 @@ export default function App() {
                 {filtered.map(name => {
                   const { last, trend, tColor, openQty, count, isEsaurito } = sideStatsMap[name] || {}
                   const active = selItem === name && page === "item"
-                  const sig    = getSignal(data?.items?.[name], data?.signalConfig)
+                  const sig    = signalCache[name] || { type:"nodata", color:"#5a6a8a", icon:"·", label:"" }
                   const cat    = data?.items?.[name]?.meta?.category
                   return (
                     <div key={name} className="si"
@@ -1316,28 +1342,7 @@ export default function App() {
                 </div>
               ) : (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:12 }}>
-                  {itemNames.map(name => {
-                    const it      = data.items[name]
-                    const ps      = it.prices || []
-                    const ls      = it.lots   || []
-                    const lsList  = it.listings || []
-                    const sig     = getSignal(it, data?.signalConfig)
-                    const last    = ps[ps.length-1]?.price
-                    const prev    = ps[ps.length-2]?.price
-                    const trend   = last!=null&&prev!=null ? (last>prev?"▲":last<prev?"▼":"—") : null
-                    const tCol    = trend==="▲"?C.green:trend==="▼"?C.red:C.muted
-                    const openLots  = ls.filter(l=>!l.sold)
-                    const openQty   = openLots.reduce((a,l)=>a+l.qty,0)
-                    const spent     = openLots.reduce((a,l)=>a+l.qty*l.price,0)
-                    const estProfit = last!=null&&openQty>0 ? openQty*last - spent : null
-                    const activeL   = lsList.filter(l=>!l.sold)
-                    const soldL     = lsList.filter(l=>l.sold)
-                    const activeQtyL = activeL.reduce((a,l)=>a+l.qty,0)
-                    const sellTimes  = soldL.map(l=>new Date(l.soldAt)-new Date(l.listedAt))
-                    const avgMs      = sellTimes.length ? sellTimes.reduce((a,b)=>a+b,0)/sellTimes.length : null
-                    const buyT   = it.meta?.buyTarget
-                    const sellT  = it.meta?.sellTarget
-                    const trend7 = calcTrend(ps)
+                  {dashboardCards.map(({ name, ps, ls, lsList, sig, last, prev, trend, tCol, openQty, spent, estProfit, activeQtyL, avgMs, buyT, sellT, trend7 }) => {
                     return (
                       <div key={name} className="dc"
                         onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices") }}
@@ -2049,7 +2054,7 @@ export default function App() {
 
               {/* ── SIGNAL + TARGET BAR ── */}
               {(() => {
-                const sig  = getSignal(item, data?.signalConfig)
+                const sig  = signalCache[selItem] || getSignal(item, data?.signalConfig)
                 const buyT  = item?.meta?.buyTarget
                 const sellT = item?.meta?.sellTarget
                 const diffEv = allStats?.avgEvent && allStats?.avgNormal
