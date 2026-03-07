@@ -19,8 +19,18 @@ ipcMain.handle('load-data', () => {
   try {
     ensureDir()
     const f = path.join(getDataDir(), 'data.json')
-    if (!fs.existsSync(f)) return null
-    return JSON.parse(fs.readFileSync(f, 'utf-8'))
+    const b = path.join(getDataDir(), 'data.backup.json')
+    // Try primary file first
+    if (fs.existsSync(f)) {
+      try { return JSON.parse(fs.readFileSync(f, 'utf-8')) }
+      catch (e) { console.error('data.json corrupted, trying backup:', e.message) }
+    }
+    // Fallback to backup
+    if (fs.existsSync(b)) {
+      try { return JSON.parse(fs.readFileSync(b, 'utf-8')) }
+      catch (e) { console.error('backup also corrupted:', e.message) }
+    }
+    return null
   } catch { return null }
 })
 

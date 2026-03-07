@@ -33,19 +33,25 @@ function fmtG(n, short = true) {
   const sign = n < 0 ? "-" : ""
   if (!short) return sign + Math.round(n).toLocaleString("it-IT") + " ori"
   if (abs >= 1_000_000_000) return sign + (abs / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "") + "kkk"
+  if (abs >= 100_000_000)   return sign + Math.round(abs / 1_000_000) + "kk"
   if (abs >= 1_000_000)     return sign + (abs / 1_000_000).toFixed(2).replace(/\.?0+$/, "") + "kk"
   if (abs >= 1_000)         return sign + (abs / 1_000).toFixed(1).replace(/\.?0+$/, "") + "k"
   return sign + Math.round(abs) + " ori"
 }
 
-// Parse "150k" "1.5kk" "2kkk" "150000" → number
+// Parse "150k" "1.5kk" "2kkk" "1.5m" "2b" "150000" → number
 function parseG(str) {
   if (!str) return NaN
   const s = String(str).trim().toLowerCase().replace(/,/g, ".")
-  if (s.endsWith("kkk")) return parseFloat(s) * 1_000_000_000
-  if (s.endsWith("kk"))  return parseFloat(s) * 1_000_000
-  if (s.endsWith("k"))   return parseFloat(s) * 1_000
-  return parseFloat(s)
+  let val
+  if (s.endsWith("kkk"))      val = parseFloat(s) * 1_000_000_000
+  else if (s.endsWith("b"))   val = parseFloat(s) * 1_000_000_000
+  else if (s.endsWith("kk"))  val = parseFloat(s) * 1_000_000
+  else if (s.endsWith("m"))   val = parseFloat(s) * 1_000_000
+  else if (s.endsWith("k"))   val = parseFloat(s) * 1_000
+  else                         val = parseFloat(s)
+  if (isNaN(val) || val < 0) return NaN
+  return val
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -98,7 +104,11 @@ function calcTrend(prices, days = 7) {
   // % change over the actual time span
   const span = xs[xs.length - 1] || 1
   const totalChg = avgY ? ((slope * span) / avgY) * 100 : 0
-  return { pct: totalChg, days, points: n, up: totalChg > 0 }
+  // R² coefficient of determination
+  const ssRes = xs.reduce((a, x, i) => a + (ys[i] - (avgY + slope * (x - avgX))) ** 2, 0)
+  const ssTot = ys.reduce((a, y) => a + (y - avgY) ** 2, 0)
+  const r2 = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0
+  return { pct: totalChg, days, points: n, up: totalChg > 0, r2 }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -113,14 +123,20 @@ function calcVolatility(prices) {
   return { cv: (std / avg) * 100, std: Math.round(std) }
 }
 
+function breakDuration(ms) {
+  const safe = Math.max(0, ms)
+  return {
+    d: Math.floor(safe / 86400000),
+    h: Math.floor((safe % 86400000) / 3600000),
+    m: Math.floor((safe % 3600000) / 60000)
+  }
+}
+
 function fmtDurationMs(ms) {
-  const safe  = Math.max(0, ms)
-  const days  = Math.floor(safe / 86400000)
-  const hours = Math.floor((safe % 86400000) / 3600000)
-  const mins  = Math.floor((safe % 3600000) / 60000)
-  if (days >= 1) return `${days}g ${hours}h`
-  if (hours >= 1) return `${hours}h ${mins}min`
-  return `${mins}min`
+  const { d, h, m } = breakDuration(ms)
+  if (d >= 1) return `${d}g ${h}h`
+  if (h >= 1) return `${h}h ${m}min`
+  return `${m}min`
 }
 
 function fmtSellTime(listedAt, soldAt) {
@@ -129,11 +145,21 @@ function fmtSellTime(listedAt, soldAt) {
 
 /* Formato dd:hh:mm per età/durata */
 function fmtAge(ms) {
-  const safe = Math.max(0, ms)
-  const d = Math.floor(safe / 86400000)
-  const h = Math.floor((safe % 86400000) / 3600000)
-  const m = Math.floor((safe % 3600000) / 60000)
+  const { d, h, m } = breakDuration(ms)
   return `${String(d).padStart(2,'0')}:${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
+
+/* ═══════════════════════════════════════════════════════
+   SHARED HELPERS
+═══════════════════════════════════════════════════════ */
+function calcOpenQty(it) {
+  return (it?.lots || []).filter(l => !l.sold).reduce((a, l) => a + l.qty, 0)
+}
+
+function calcListingProfit(l) {
+  if (l.buyPrice == null) return null
+  const qty = l.coveredQty || l.qty
+  return (l.listPrice - l.buyPrice) * qty - (l.tax || 0)
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -166,9 +192,10 @@ function getSignal(it, cfg) {
   const avg        = refVals.reduce((a,b) => a+b, 0) / refVals.length
   const diffPct    = (current - avg) / avg
 
+  const openQty    = calcOpenQty(it)
   const openLots   = (it?.lots || []).filter(l => !l.sold)
-  const openQty    = openLots.reduce((a,l) => a+l.qty, 0)
   const avgBuy     = openQty ? openLots.reduce((a,l)=>a+l.qty*l.price,0)/openQty : null
+  const vol        = calcVolatility(prices)
   const buyTarget  = it?.meta?.buyTarget  ? parseFloat(it.meta.buyTarget)  : null
   const sellTarget = it?.meta?.sellTarget ? parseFloat(it.meta.sellTarget) : null
 
@@ -177,13 +204,15 @@ function getSignal(it, cfg) {
   if (sellTarget && openQty > 0 && current >= sellTarget) return { type:"sell_target", label:"VENDI ★",     hint:"Hai raggiunto il tuo obiettivo di vendita — metti in vendita al bazar ora.",                      color:"#3b82f6", bg:"rgba(59,130,246,.12)", icon:"🔵", diffPct }
 
   // Segnali automatici (soglie configurabili)
-  if (diffPct <= -thStrongBuy) return { type:"strong_buy",  label:"FORTE COMPRA", hint:`Il prezzo è molto più basso del solito (−${c.strongBuy ?? 15}%+). Ottimo momento per fare scorta.`,                color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct }
-  if (diffPct <= -thBuy)       return { type:"buy",         label:"COMPRA",       hint:"Il prezzo è sotto la media storica. Buon momento per acquistare.",                               color:"#34d399", bg:"rgba(52,211,153,.08)", icon:"🟢", diffPct }
-  if (diffPct >=  thOverprice) return { type:"overpriced",  label:"TROPPO CARO",  hint:`Il prezzo è molto sopra la media (+${c.overpriced ?? 15}%+). Sconsigliato acquistare — aspetta che scenda.`,        color:"#ef4444", bg:"rgba(239,68,68,.10)",  icon:"🔴", diffPct }
-  if (diffPct >=  thHigh)      return { type:"high",        label:"SOPRA MEDIA",  hint:"Il prezzo è un po' alto rispetto alla media. Meglio aspettare o vendere se hai stock.",          color:"#f97316", bg:"rgba(249,115,22,.08)", icon:"🟠", diffPct }
+  const volNote = vol && vol.cv >= 25 ? " ⚠ Prezzo molto instabile — rischio elevato." : ""
+  const stockNote = openQty > 0 ? ` Hai già ×${openQty} in magazzino.` : ""
+  if (diffPct <= -thStrongBuy) return { type:"strong_buy",  label:"FORTE COMPRA", hint:`Il prezzo è molto più basso del solito (−${c.strongBuy ?? 15}%+). Ottimo momento per fare scorta.${stockNote}${volNote}`,                color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct, openQty, vol }
+  if (diffPct <= -thBuy)       return { type:"buy",         label:"COMPRA",       hint:`Il prezzo è sotto la media storica. Buon momento per acquistare.${stockNote}${volNote}`,                               color:"#34d399", bg:"rgba(52,211,153,.08)", icon:"🟢", diffPct, openQty, vol }
+  if (diffPct >=  thOverprice) return { type:"overpriced",  label:"TROPPO CARO",  hint:`Il prezzo è molto sopra la media (+${c.overpriced ?? 15}%+). Sconsigliato acquistare — aspetta che scenda.${volNote}`,        color:"#ef4444", bg:"rgba(239,68,68,.10)",  icon:"🔴", diffPct, openQty, vol }
+  if (diffPct >=  thHigh)      return { type:"high",        label:"SOPRA MEDIA",  hint:`Il prezzo è un po' alto rispetto alla media. Meglio aspettare o vendere se hai stock.${volNote}`,          color:"#f97316", bg:"rgba(249,115,22,.08)", icon:"🟠", diffPct, openQty, vol }
   if (avgBuy && current >= avgBuy * (1 + thSell) && openQty > 0)
-                         return { type:"sell",        label:"VENDI",        hint:`Il prezzo attuale è più alto di quanto hai pagato (+${c.sell ?? 12}%). Valuta di mettere in vendita.`,        color:"#3b82f6", bg:"rgba(59,130,246,.10)", icon:"🔵", diffPct }
-  return               { type:"hold",          label:"NELLA NORMA",  hint:"Il prezzo è nella media storica. Nessuna azione urgente — monitora e aspetta un'opportunità.",   color:"#f59e0b", bg:"rgba(245,158,11,.08)", icon:"🟡", diffPct }
+                         return { type:"sell",        label:"VENDI",        hint:`Il prezzo attuale è più alto di quanto hai pagato (+${c.sell ?? 12}%). Valuta di mettere in vendita.`,        color:"#3b82f6", bg:"rgba(59,130,246,.10)", icon:"🔵", diffPct, openQty, vol }
+  return               { type:"hold",          label:"NELLA NORMA",  hint:"Il prezzo è nella media storica. Nessuna azione urgente — monitora e aspetta un'opportunità.",   color:"#f59e0b", bg:"rgba(245,158,11,.08)", icon:"🟡", diffPct, openQty, vol }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -348,6 +377,8 @@ export default function App() {
         }
         setData(d)
         if (d.ndRate) setNdRateInput(String(d.ndRate))
+        if (d.globalNdDisc != null) setGlobalNdDisc(d.globalNdDisc)
+        if (d.qRecent) setQRecent(d.qRecent)
         const names = Object.keys(d.items || {})
         if (names.length) { setSelItem(names[0]); setPage("item") }
       } catch (err) {
@@ -452,6 +483,11 @@ export default function App() {
     return [...s].sort((a, b) => parseDate(b) - parseDate(a))
   }, [prices])
 
+  // Auto-select most recent day with data when current chartDay has none
+  useEffect(() => {
+    if (allDays.length && !allDays.includes(chartDay)) setChartDay(allDays[0])
+  }, [allDays])
+
   const dayPrices = useMemo(() =>
     prices.filter(p => !p.esaurito && fmtDate(new Date(p.timestamp)) === chartDay),
     [prices, chartDay])
@@ -548,11 +584,7 @@ export default function App() {
     const activeValue = active.reduce((a,l) => a + l.qty * l.listPrice, 0)
     const sellTimesMs = sold.map(l => new Date(l.soldAt) - new Date(l.listedAt))
     const avgMs       = sellTimesMs.length ? sellTimesMs.reduce((a,b)=>a+b,0)/sellTimesMs.length : null
-    const totalProfit = sold.reduce((a,l) => {
-      if (l.buyPrice == null) return a
-      const qty = l.coveredQty || l.qty
-      return a + (l.listPrice - l.buyPrice) * qty - (l.tax || 0)
-    }, 0)
+    const totalProfit = sold.reduce((a,l) => a + (calcListingProfit(l) || 0), 0)
     const profitableSales = sold.filter(l => l.buyPrice != null)
     return { active, sold, activeQty, activeValue, avgMs, totalProfit, profitableSales }
   }, [listings])
@@ -575,7 +607,7 @@ export default function App() {
       const listValue    = activeList.reduce((a,l) => a + l.qty * l.listPrice, 0)
       inStock   += lotValue
       atMarket  += listValue
-      realized  += soldWithBuy.reduce((a,l) => a + (l.listPrice - l.buyPrice) * (l.coveredQty || l.qty) - (l.tax || 0), 0)
+      realized  += soldWithBuy.reduce((a,l) => a + (calcListingProfit(l) || 0), 0)
       if (openLots.length > 0 || activeList.length > 0) totalItems++
     }
     return { inStock, atMarket, realized, totalItems }
@@ -592,7 +624,7 @@ export default function App() {
         const l = lsList[i]
         if (l.sold) continue
         const covered = l.coveredQty || 0
-        const profit = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
+        const profit = covered > 0 ? calcListingProfit(l) : null
         const daysActive = (Date.now() - new Date(l.listedAt)) / 86400000
         rows.push({ name, listingIdx: i, listing: l, covered, profit, daysActive })
       }
@@ -798,7 +830,6 @@ export default function App() {
       const it = data?.items?.[name]
       if (!it) { map[name] = defaults; continue }
       const ps         = it.prices || []
-      const ls         = it.lots   || []
       const lastEntry  = ps[ps.length-1]
       const isEsaurito = lastEntry?.esaurito === true
       const realPs     = ps.filter(p => !p.esaurito)
@@ -806,7 +837,7 @@ export default function App() {
       const t7         = calcTrend(ps)
       const trend      = t7 ? (t7.pct > 0.5 ? "▲" : t7.pct < -0.5 ? "▼" : "—") : null
       const tColor     = trend === "▲" ? C.green : trend === "▼" ? C.red : "#4b5563"
-      const openQty    = ls.filter(l => !l.sold).reduce((a,l) => a+l.qty, 0)
+      const openQty    = calcOpenQty(it)
       map[name] = { last, trend, tColor, openQty, count: realPs.length, isEsaurito }
     }
     return map
@@ -1051,9 +1082,10 @@ export default function App() {
     if (!qItem || isNaN(price) || price <= 0) return
     const entry = { price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: "" }
     const it = { ...data.items[qItem], prices: [...(data.items[qItem]?.prices || []), entry] }
-    const nd = { ...data, items: { ...data.items, [qItem]: it } }
+    const newRecent = [{ name: qItem, price: Math.round(price), ts: new Date().toISOString() }, ...qRecent].slice(0, 12)
+    setQRecent(newRecent)
+    const nd = { ...data, items: { ...data.items, [qItem]: it }, qRecent: newRecent }
     upd(nd)
-    setQRecent(r => [{ name: qItem, price: Math.round(price), ts: new Date().toISOString() }, ...r].slice(0, 12))
     setQPrice("")
     // Auto-advance to next item (alphabetical)
     const names = Object.keys(nd.items || {}).sort((a,b) => a.localeCompare(b))
@@ -1074,7 +1106,7 @@ export default function App() {
       navigator.clipboard.writeText(name)
       return name
     })
-    setQPrice(""); setQRecent([])
+    setQPrice("")
     setShowQuick(true)
     setTimeout(() => qPriceRef.current?.focus(), 80)
   }, [itemNames, data])
@@ -1136,8 +1168,7 @@ export default function App() {
 
   /* ── LOADING ── */
   if (!data) return (
-    <div style={{ height:"100vh", background:"#13151f", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{ height:"100vh", background:"#13151f", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, WebkitAppRegion:"drag" }}>
       <div style={{ width:36, height:36, border:"3px solid #272b3d", borderTopColor:"#e8a838", borderRadius:"50%", animation:"spin .8s linear infinite" }}/>
       <div style={{ color:"#8895b3", fontFamily:"monospace", letterSpacing:4, fontSize:12 }}>CARICAMENTO</div>
     </div>
@@ -1155,9 +1186,6 @@ export default function App() {
         ::-webkit-scrollbar-track{background:#13151f}
         ::-webkit-scrollbar-thumb{background:#353a52;border-radius:3px}
         ::-webkit-scrollbar-thumb:hover{background:#4a5270}
-        @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-        @keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
         .up{animation:up .2s ease}
         .r:hover{background:rgba(255,255,255,.04)!important;transition:background .12s}
         .si:hover{background:rgba(232,168,56,.08)!important;cursor:pointer}
@@ -1876,7 +1904,7 @@ export default function App() {
                   <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:6 }}>SCONTO EVENTO</div>
                   <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
                     {ND_DISCOUNTS.map(d => (
-                      <button key={d} onClick={()=>setGlobalNdDisc(d)}
+                      <button key={d} onClick={()=>{ setGlobalNdDisc(d); upd({ ...data, globalNdDisc: d }) }}
                         style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?"#f59e0b":C.border):C.border}`, background:globalNdDisc===d?(d>0?"rgba(245,158,11,.18)":"rgba(255,255,255,.05)"):"transparent", color:globalNdDisc===d?(d>0?"#f59e0b":C.text):C.muted }}>
                         {d === 0 ? "OFF" : `-${d}%`}
                       </button>
@@ -2139,8 +2167,8 @@ export default function App() {
                     : null,
                   trend7
                     ? { l:`TREND ${trend7.days}GG`, v:`${trend7.pct>=0?"+":""}${trend7.pct.toFixed(1)}%`, c:trend7.up?C.green:C.red,
-                        sub: trend7.up ? "sta salendo" : "sta scendendo",
-                        title:"Regressione lineare degli ultimi 7 giorni" }
+                        sub: `${trend7.up ? "sta salendo" : "sta scendendo"} · R²=${trend7.r2.toFixed(2)}`,
+                        title:`Regressione lineare degli ultimi 7 giorni — R²=${trend7.r2.toFixed(2)} (1.00 = trend perfetto)` }
                     : null,
                   vol
                     ? { l:"STABILITÀ PREZZO", v:vol.cv < 10 ? "STABILE" : vol.cv < 25 ? "MODERATA" : "INSTABILE", c:vol.cv<10?C.green:vol.cv<25?C.gold:C.red,
@@ -2439,7 +2467,7 @@ export default function App() {
                         if (l.sold) return null
                         const daysActive = ((Date.now() - new Date(l.listedAt)) / 86400000)
                         const covered = l.coveredQty || 0
-                        const profitOnCovered = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
+                        const profitOnCovered = covered > 0 ? calcListingProfit(l) : null
                         return (
                           <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:10, flexWrap:"wrap" }}>
                             <div style={{ display:"flex", flexDirection:"column", minWidth:118, flexShrink:0 }}>
@@ -2510,7 +2538,7 @@ export default function App() {
                           const timeToSell   = fmtSellTime(l.listedAt, l.soldAt)
                           const msToSell     = new Date(l.soldAt) - new Date(l.listedAt)
                           const covered      = l.coveredQty || 0
-                          const profitTotal  = (l.buyPrice != null && covered > 0) ? (l.listPrice - l.buyPrice) * covered - (l.tax || 0) : null
+                          const profitTotal  = covered > 0 ? calcListingProfit(l) : null
                           return (
                             <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 14px", gap:10, flexWrap:"wrap" }}>
                               <span style={{ fontSize:11, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(l.listedAt)}</span>
