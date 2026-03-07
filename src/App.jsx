@@ -381,6 +381,10 @@ export default function App() {
   // analisi page
   const [sortCol, setSortCol] = useState("signal")
   const [sortDir, setSortDir] = useState(1)          // 1 asc, -1 desc
+  const [analSearch, setAnalSearch] = useState("")
+  const [analSignalFilter, setAnalSignalFilter] = useState("__all__")  // "__all__" or signal type group
+  const [analNameW, setAnalNameW] = useState(160)    // resizable ITEM column width
+  const analResizing = useRef(false)
 
   // nos dollari page
   const [ndBuyQty,    setNdBuyQty]    = useState("")
@@ -1296,9 +1300,32 @@ export default function App() {
     })
   }, [data, itemNames])
 
+  /* ── SIGNAL FILTER GROUPS ── */
+  const SIGNAL_GROUPS = [
+    { id:"__all__",   label:"TUTTI",     color:C.muted,   types:null },
+    { id:"buy",       label:"🟢 COMPRA",  color:"#10b981", types:["strong_buy","buy","buy_target"] },
+    { id:"hold",      label:"🟡 NORMA",   color:"#f59e0b", types:["hold"] },
+    { id:"high",      label:"🟠 SOPRA",   color:"#f97316", types:["high"] },
+    { id:"overpriced",label:"🔴 CARO",    color:"#ef4444", types:["overpriced"] },
+    { id:"sell",      label:"🔵 VENDI",   color:"#3b82f6", types:["sell","sell_target"] },
+    { id:"esaurito",  label:"📭 ESAURITO", color:"#a78bfa", types:["esaurito"] },
+    { id:"nodata",    label:"· POCHI DATI", color:"#5a6a8a", types:["nodata"] },
+  ]
+
   /* ── SORTED ANALYSIS ROWS ── */
   const sortedAnalysis = useMemo(() => {
-    return [...analysisRows].sort((a,b) => {
+    let rows = analysisRows
+    // search filter
+    if (analSearch.trim()) {
+      const q = analSearch.trim().toLowerCase()
+      rows = rows.filter(r => r.name.toLowerCase().includes(q))
+    }
+    // signal filter
+    const group = SIGNAL_GROUPS.find(g => g.id === analSignalFilter)
+    if (group?.types) {
+      rows = rows.filter(r => group.types.includes(r.signal.type))
+    }
+    return [...rows].sort((a,b) => {
       let va = a[sortCol], vb = b[sortCol]
       if (sortCol === "signal") { va = a.signal.diffPct ?? 0; vb = b.signal.diffPct ?? 0 }
       if (sortCol === "trend7") { va = a.trend7?.pct ?? null; vb = b.trend7?.pct ?? null }
@@ -1308,7 +1335,7 @@ export default function App() {
       if (typeof va === "string") return va.localeCompare(vb) * sortDir
       return (va - vb) * sortDir
     })
-  }, [analysisRows, sortCol, sortDir])
+  }, [analysisRows, sortCol, sortDir, analSearch, analSignalFilter])
 
   /* ── LOADING ── */
   if (!data) return (
@@ -1591,28 +1618,31 @@ export default function App() {
                 </div>
               ) : (<>
 
-              {/* Legenda segnali — compatta con tooltip */}
-              <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:14 }}>
-                {[
-                  { label:"🟢 COMPRA",      hint:"Sotto media",       color:"#10b981", bg:"rgba(16,185,129,.12)"  },
-                  { label:"🟡 NORMA",        hint:"Prezzo stabile",    color:"#f59e0b", bg:"rgba(245,158,11,.08)"  },
-                  { label:"🟠 SOPRA",        hint:"Sopra media",       color:"#f97316", bg:"rgba(249,115,22,.08)"  },
-                  { label:"🔴 CARO",         hint:"+15%+ sopra media", color:"#ef4444", bg:"rgba(239,68,68,.10)"   },
-                  { label:"🔵 VENDI",        hint:"Hai stock, vendi",  color:"#3b82f6", bg:"rgba(59,130,246,.10)"  },
-                  { label:"📭 ESAURITO",     hint:"Non disponibile",   color:"#a78bfa", bg:"rgba(167,139,250,.1)" },
-                ].map(s => (
-                  <div key={s.label} title={s.hint} style={{ background:s.bg, border:`1px solid ${s.color}55`, borderRadius:6, padding:"4px 10px", fontSize:12, color:s.color, fontWeight:700, cursor:"help" }}>
-                    {s.label}
-                  </div>
-                ))}
+              {/* Search + signal filters */}
+              <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+                <input value={analSearch} onChange={e => setAnalSearch(e.target.value)} placeholder="Cerca item..."
+                  style={inp({ width:200, fontSize:13, padding:"7px 12px" })}/>
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                  {SIGNAL_GROUPS.map(g => {
+                    const active = analSignalFilter === g.id
+                    const count = g.types ? analysisRows.filter(r => g.types.includes(r.signal.type)).length : analysisRows.length
+                    return (
+                      <button key={g.id} onClick={() => setAnalSignalFilter(f => f === g.id ? "__all__" : g.id)}
+                        style={{ background:active ? g.color + "22" : "transparent", border:`1px solid ${active ? g.color : C.border2}`, borderRadius:6, padding:"4px 10px", fontSize:12, color:active ? g.color : C.muted, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
+                        {g.label} <span style={{ opacity:.6, fontWeight:400 }}>{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               {/* Tabella */}
               <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
                 {/* Header */}
                 {(() => {
+                  const nameW = analNameW + "px"
                   const cols = [
-                    { k:"name",       l:"ITEM",       w:"160px", title:"Nome dell'item"                                                       },
+                    { k:"name",       l:"ITEM",       w:nameW,  title:"Nome dell'item", resizable:true                                         },
                     { k:"signal",     l:"SEGNALE",    w:"130px", title:"Segnale di trading: COMPRA / VENDI / NELLA NORMA basato sulla media"   },
                     { k:"current",    l:"PREZZO",     w:"100px", title:"Ultimo prezzo registrato al bazar"                                     },
                     { k:"diffPct",    l:"vs MEDIA",   w:"80px",  title:"Differenza % tra il prezzo attuale e la media storica"                 },
@@ -1621,9 +1651,24 @@ export default function App() {
                     { k:"trend7",     l:"TREND 7GG",  w:"90px",  title:"Andamento del prezzo negli ultimi 7 giorni (regressione lineare)"      },
                     { k:"vol",        l:"STABILITÀ",  w:"80px",  title:"Stabilità del prezzo: STABILE = poco rischio, INSTABILE = molto rischio" },
                   ]
-                  const Th = ({ k, l, w, title }) => (
-                    <div onClick={()=>sortAnalysis(k)} title={title||l} style={{ width:w, minWidth:w, fontSize:12, color:sortCol===k?C.gold:C.muted, letterSpacing:1, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3 }}>
+                  const Th = ({ k, l, w, title, resizable }) => (
+                    <div onClick={()=>sortAnalysis(k)} title={title||l} style={{ width:w, minWidth:w, fontSize:12, color:sortCol===k?C.gold:C.muted, letterSpacing:1, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, position:"relative" }}>
                       {l}{sortCol===k ? (sortDir===1?"▲":"▼") : ""}
+                      {resizable && (
+                        <div
+                          onMouseDown={e => {
+                            e.stopPropagation()
+                            analResizing.current = true
+                            const startX = e.clientX
+                            const startW = analNameW
+                            const onMove = ev => { if (analResizing.current) setAnalNameW(Math.max(100, Math.min(400, startW + ev.clientX - startX))) }
+                            const onUp = () => { analResizing.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
+                            window.addEventListener("mousemove", onMove)
+                            window.addEventListener("mouseup", onUp)
+                          }}
+                          style={{ position:"absolute", right:-2, top:0, bottom:0, width:6, cursor:"col-resize", zIndex:2 }}
+                        />
+                      )}
                     </div>
                   )
 
@@ -1641,7 +1686,7 @@ export default function App() {
                           onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("prices") }}
                           style={{ display:"flex", gap:12, padding:"11px 16px", borderBottom:`1px solid ${C.border}`, cursor:"pointer", background:i%2===0?"transparent":"#0f1119", alignItems:"center" }}>
                           {/* Nome */}
-                          <div style={{ width:"160px", minWidth:"160px", fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                          <div style={{ width:nameW, minWidth:nameW, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
                           {/* Segnale */}
                           <div style={{ width:"130px", minWidth:"130px" }}>
                             <div style={{ background:sig.bg, border:`1px solid ${sig.color}55`, borderRadius:5, padding:"3px 8px", fontSize:11, color:sig.color, fontWeight:700, display:"inline-block" }}>
@@ -1678,7 +1723,7 @@ export default function App() {
               </div>
 
               <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
-                {analysisRows.length} item
+                {sortedAnalysis.length}{sortedAnalysis.length !== analysisRows.length ? ` / ${analysisRows.length}` : ""} item
               </div>
               </>)}
             </div>
