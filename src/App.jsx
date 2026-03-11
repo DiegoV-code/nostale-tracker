@@ -181,7 +181,7 @@ function getSignal(it, cfg) {
 
   const prices     = it?.prices || []
   const realPrices = prices.filter(p => !p.esaurito)
-  if (realPrices.length < 3) return { type:"nodata", label:"Pochi dati", hint:"Registra almeno 3 prezzi per ricevere segnali di trading", color:"#5a6a8a", bg:"#0f1119", icon:"·" }
+  if (realPrices.length < 3) return { type:"nodata", label:"Pochi dati", hint:"Registra almeno 3 prezzi per ricevere segnali di trading", color:"#5a6a8a", bg:C.inputBg, icon:"·" }
 
   // Se l'ultima entry è "esaurito", segnala subito
   const lastEntry = prices[prices.length - 1]
@@ -286,7 +286,7 @@ const StatBar = ({ items, gap = 8, mb = 18 }) => (
       <div key={s.l} title={s.title || ""} style={{ flex:s.flex || "1 1 100px", background:s.bg2 || C.panel, border:`1px solid ${s.border || C.border}`, borderRadius:s.radius || 10, padding:s.pad || "10px 13px", cursor:s.title?"help":"default" }}>
         <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
         <div style={{ fontSize:s.big?22:17, color:s.c, fontWeight:700, fontFamily:"monospace", marginTop:3 }}>{s.v}</div>
-        {s.sub && <div style={{ fontSize:11, color:"#6b7a96", marginTop:2 }}>{s.sub}</div>}
+        {s.sub && <div style={{ fontSize:11, color:C.muted2, marginTop:2 }}>{s.sub}</div>}
       </div>
     ))}
   </div>
@@ -295,21 +295,42 @@ const StatBar = ({ items, gap = 8, mb = 18 }) => (
 /* ═══════════════════════════════════════════════════════
    PALETTE & STYLE HELPERS
 ═══════════════════════════════════════════════════════ */
-const C = {
+const DARK = {
   bg:      "#13151f",
   panel:   "#1c1f2e",
   border:  "#272b3d",
   border2: "#353a52",
   text:    "#dde6f0",
   muted:   "#8895b3",
+  muted2:  "#6b7a96",
   gold:    "#e8a838",
   green:   "#4ade80",
   red:     "#fb7185",
   blue:    "#60a5fa",
+  inputBg: "#0f1119",
+  pillTxt: "#0f1119",
+  flat:    "#4b5563",
 }
+const LIGHT = {
+  bg:      "#e4e7ed",
+  panel:   "#f5f6f8",
+  border:  "#b0b8c8",
+  border2: "#8e99ad",
+  text:    "#111827",
+  muted:   "#3d4a5c",
+  muted2:  "#4b5568",
+  gold:    "#a06510",
+  green:   "#15803d",
+  red:     "#b91c1c",
+  blue:    "#1d4ed8",
+  inputBg: "#dce1ea",
+  pillTxt: "#ffffff",
+  flat:    "#6b7280",
+}
+let C = DARK
 
 const inp = (extra={}) => ({
-  background: "#0f1119", border: `1px solid ${C.border2}`,
+  background: C.inputBg, border: `1px solid ${C.border2}`,
   borderRadius: 8, color: C.text, padding: "10px 13px",
   fontSize: 15, fontFamily: "monospace", outline: "none",
   width: "100%", transition: "border-color .15s",
@@ -319,7 +340,7 @@ const inp = (extra={}) => ({
 const pill = (active, col=C.gold, extra={}) => ({
   background: active ? col : "transparent",
   border: `1px solid ${active ? col : C.border2}`,
-  color: active ? "#0f1119" : col,
+  color: active ? C.pillTxt : col,
   borderRadius: 8, padding: "9px 16px", cursor: "pointer",
   fontSize: 14, fontWeight: 700, letterSpacing: 1,
   transition: "all .15s", ...extra
@@ -336,6 +357,10 @@ export default function App() {
   const [updateStatus, setUpdateStatus] = useState(null) // null | "available" | "downloading" | "downloaded" | "error"
   const [downloadPct, setDownloadPct] = useState(0)
   const [updateError, setUpdateError] = useState("")
+
+  // theme
+  const [theme, setTheme] = useState(() => localStorage.getItem("nostale-theme") || "dark")
+  C = theme === "light" ? LIGHT : DARK
 
   // navigation
   const [page,    setPage]    = useState("dashboard")   // dashboard | item | new | analisi | bazar | magazzino | nd
@@ -406,7 +431,9 @@ export default function App() {
 
   // quick-add modal
   const [showQuick,   setShowQuick]   = useState(false)
-  const [qItem,       setQItem]       = useState("")
+  const [qItem,       setQItem_]      = useState("")
+  const qItemRef = useRef("")
+  const setQItem = v => { const val = typeof v === "function" ? v(qItemRef.current) : v; qItemRef.current = val; setQItem_(val) }
   const [qPrice,      setQPrice]      = useState("")
   const [qRecent,     setQRecent]     = useState([])   // { name, price, ts }
   const qPriceRef = useRef(null)
@@ -437,6 +464,12 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler)
   }, [showQuick, showSettings])
 
+  // Sync theme to body + localStorage
+  useEffect(() => {
+    document.body.style.background = theme === "light" ? LIGHT.bg : DARK.bg
+    localStorage.setItem("nostale-theme", theme)
+  }, [theme])
+
   // Persist navigation state to localStorage
   useEffect(() => {
     if (data) localStorage.setItem("nostale-nav", JSON.stringify({ page, selItem, subPage }))
@@ -454,6 +487,7 @@ export default function App() {
         if (d.ndRate) setNdRateInput(String(d.ndRate))
         if (d.globalNdDisc) setGlobalNdDisc(d.globalNdDisc)
         if (d.qRecent?.length) setQRecent(d.qRecent)
+        if (d.theme) setTheme(d.theme)
         // Restore navigation state from localStorage
         try {
           const nav = JSON.parse(localStorage.getItem("nostale-nav"))
@@ -967,7 +1001,7 @@ export default function App() {
 
   /* ── SIDEBAR CARD STATS (memoized) ── */
   const sideStatsMap = useMemo(() => {
-    const defaults = { last: null, trend: null, tColor: "#4b5563", openQty: 0, count: 0, isEsaurito: false }
+    const defaults = { last: null, trend: null, tColor: C.flat, openQty: 0, count: 0, isEsaurito: false }
     const map = {}
     for (const name of itemNames) {
       const it = data?.items?.[name]
@@ -979,7 +1013,7 @@ export default function App() {
       const last       = realPs[realPs.length-1]?.price
       const t7         = calcTrend(ps, trendDays)
       const trend      = t7 ? (t7.pct > 0.5 ? "▲" : t7.pct < -0.5 ? "▼" : "—") : null
-      const tColor     = trend === "▲" ? C.green : trend === "▼" ? C.red : "#4b5563"
+      const tColor     = trend === "▲" ? C.green : trend === "▼" ? C.red : C.flat
       const openQty    = calcOpenQty(it)
       map[name] = { last, trend, tColor, openQty, count: realPs.length, isEsaurito }
     }
@@ -999,8 +1033,10 @@ export default function App() {
   const recordPrice = () => {
     const price = parseG(pVal)
     if (!selItem || isNaN(price) || price <= 0) return
-    // Anomaly check: se devia >40% dalla media storica, chiedi conferma
-    const realPrices = prices.filter(p => !p.esaurito)
+    // Anomaly check: usa dataRef per dati freschi
+    const pre = dataRef.current || data
+    const prePrices = pre.items[selItem]?.prices || []
+    const realPrices = prePrices.filter(p => !p.esaurito)
     if (realPrices.length >= 3) {
       const avg    = realPrices.reduce((a, p) => a + p.price, 0) / realPrices.length
       const devPct = Math.abs(price - avg) / avg
@@ -1009,25 +1045,33 @@ export default function App() {
         if (!window.confirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
+    // Ri-leggi dataRef DOPO il confirm (il dialog blocca il thread, lo stato potrebbe essere cambiato)
+    const d = dataRef.current || data
+    const curPrices = d.items[selItem]?.prices || []
     const entry = { price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: pNote.trim() }
-    const it = { ...data.items[selItem], prices: [...prices, entry] }
-    upd({ ...data, items: { ...data.items, [selItem]: it } })
+    const it = { ...d.items[selItem], prices: [...curPrices, entry] }
+    upd({ ...d, items: { ...d.items, [selItem]: it } })
     setPVal(""); setPNote("")
   }
 
   const recordEsaurito = () => {
     if (!selItem) return
+    const d = dataRef.current || data
+    const curPrices = d.items[selItem]?.prices || []
     // Non aggiungere doppio esaurito consecutivo
-    if (prices.length && prices[prices.length-1].esaurito) return
+    if (curPrices.length && curPrices[curPrices.length-1].esaurito) return
     const entry = { price: null, esaurito: true, timestamp: new Date().toISOString(), eventId: curEventId, note: "" }
-    const it = { ...data.items[selItem], prices: [...prices, entry] }
-    upd({ ...data, items: { ...data.items, [selItem]: it } })
+    const it = { ...d.items[selItem], prices: [...curPrices, entry] }
+    upd({ ...d, items: { ...d.items, [selItem]: it } })
   }
 
   const delPrice = idx => {
     if (!window.confirm("Eliminare questa registrazione di prezzo?")) return
-    const it = { ...data.items[selItem], prices: prices.filter((_,i) => i !== idx) }
-    upd({ ...data, items: { ...data.items, [selItem]: it } })
+    // Use dataRef to avoid stale closure after confirm dialog
+    const d = dataRef.current || data
+    const curPrices = d.items[selItem]?.prices || []
+    const it = { ...d.items[selItem], prices: curPrices.filter((_,i) => i !== idx) }
+    upd({ ...d, items: { ...d.items, [selItem]: it } })
   }
 
   const recordLot = () => {
@@ -1240,17 +1284,19 @@ export default function App() {
 
   const quickSave = () => {
     const price = parseG(qPrice)
-    if (!qItem || isNaN(price) || price <= 0) return
+    const cur = qItemRef.current
+    if (!cur || isNaN(price) || price <= 0) return
+    const d = dataRef.current || data
     const entry = { price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: "" }
-    const it = { ...data.items[qItem], prices: [...(data.items[qItem]?.prices || []), entry] }
-    const newRecent = [{ name: qItem, price: Math.round(price), ts: new Date().toISOString() }, ...qRecent].slice(0, 12)
+    const it = { ...d.items[cur], prices: [...(d.items[cur]?.prices || []), entry] }
+    const newRecent = [{ name: cur, price: Math.round(price), ts: new Date().toISOString() }, ...qRecent].slice(0, 12)
     setQRecent(newRecent)
-    const nd = { ...data, items: { ...data.items, [qItem]: it }, qRecent: newRecent }
+    const nd = { ...d, items: { ...d.items, [cur]: it }, qRecent: newRecent }
     upd(nd)
     setQPrice("")
     // Auto-advance to next item (alphabetical)
     const names = Object.keys(nd.items || {}).sort((a,b) => a.localeCompare(b))
-    const curIdx = names.indexOf(qItem)
+    const curIdx = names.indexOf(cur)
     if (curIdx >= 0 && curIdx < names.length - 1) {
       const nextName = names[curIdx + 1]
       setQItem(nextName)
@@ -1261,11 +1307,18 @@ export default function App() {
 
   const openQuick = useCallback(() => {
     if (itemNames.length === 0) return
-    const first = itemNames[0]
+    const d = dataRef.current || data
+    const names = Object.keys(d?.items || {}).sort((a,b) => a.localeCompare(b))
+    if (!names.length) return
     setQItem(q => {
-      const name = q && data?.items?.[q] ? q : first
-      navigator.clipboard.writeText(name)
-      return name
+      // Se il modal è già aperto e l'item corrente esiste, mantienilo
+      if (q && d?.items?.[q]) {
+        navigator.clipboard.writeText(q)
+        return q
+      }
+      const first = names[0]
+      navigator.clipboard.writeText(first)
+      return first
     })
     setQPrice("")
     setShowQuick(true)
@@ -1340,9 +1393,9 @@ export default function App() {
 
   /* ── LOADING ── */
   if (!data) return (
-    <div style={{ height:"100vh", background:"#13151f", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, WebkitAppRegion:"drag" }}>
-      <div style={{ width:36, height:36, border:"3px solid #272b3d", borderTopColor:"#e8a838", borderRadius:"50%", animation:"spin .8s linear infinite" }}/>
-      <div style={{ color:"#8895b3", fontFamily:"monospace", letterSpacing:4, fontSize:12 }}>CARICAMENTO</div>
+    <div style={{ height:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, WebkitAppRegion:"drag" }}>
+      <div style={{ width:36, height:36, border:`3px solid ${C.border}`, borderTopColor:C.gold, borderRadius:"50%", animation:"spin .8s linear infinite" }}/>
+      <div style={{ color:C.muted, fontFamily:"monospace", letterSpacing:4, fontSize:12 }}>CARICAMENTO</div>
     </div>
   )
 
@@ -1353,18 +1406,18 @@ export default function App() {
     <div style={{ height:"100vh", background:C.bg, color:C.text, fontFamily:"'Courier New',monospace", display:"flex", flexDirection:"column" }}>
       <style>{`
         *{box-sizing:border-box}
-        input:focus,select:focus{border-color:#e8a838!important;outline:none}
+        input:focus,select:focus{border-color:${C.gold}!important;outline:none}
         ::-webkit-scrollbar{width:4px;height:4px}
-        ::-webkit-scrollbar-track{background:#13151f}
-        ::-webkit-scrollbar-thumb{background:#353a52;border-radius:3px}
-        ::-webkit-scrollbar-thumb:hover{background:#4a5270}
+        ::-webkit-scrollbar-track{background:${C.bg}}
+        ::-webkit-scrollbar-thumb{background:${C.border2};border-radius:3px}
+        ::-webkit-scrollbar-thumb:hover{background:${theme==="light"?"#7a8494":"#4a5270"}}
         .up{animation:up .2s ease}
-        .r:hover{background:rgba(255,255,255,.04)!important;transition:background .12s}
-        .si:hover{background:rgba(232,168,56,.08)!important;cursor:pointer}
-        .dc:hover{border-color:#e8a83866!important;transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+        .r:hover{background:${theme==="light"?"rgba(0,0,0,.04)":"rgba(255,255,255,.04)"}!important;transition:background .12s}
+        .si:hover{background:rgba(${theme==="light"?"184,120,26":"232,168,56"},.08)!important;cursor:pointer}
+        .dc:hover{border-color:${C.gold}66!important;transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,${theme==="light"?".1":".3"})}
         .dc{transition:all .18s}
         input[type=number]::-webkit-inner-spin-button{opacity:.4}
-        select option{background:#1c1f2e;color:#dde6f0}
+        select option{background:${C.panel};color:${C.text}}
       `}</style>
 
       {/* ══ TITLEBAR ══ */}
@@ -1377,24 +1430,24 @@ export default function App() {
         {saveStatus === "ok" && <span style={{ color:C.green, fontSize:11, WebkitAppRegion:"no-drag" }}>✓</span>}
 
         <button onClick={()=>setPage("analisi")} title="Analisi comparativa item"
-          style={{ background:page==="analisi"?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${page==="analisi"?C.gold:"#e8a83855"}`, borderRadius:7, color:page==="analisi"?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
+          style={{ background:page==="analisi"?`${C.gold}2e`:`${C.gold}14`, border:`1px solid ${page==="analisi"?C.gold:`${C.gold}55`}`, borderRadius:7, color:page==="analisi"?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
           📊 Analisi
         </button>
 
         <div style={{ flex:1 }}/>
 
         <button onClick={openQuick} title="Quick-add prezzi (Ctrl+Q)"
-          style={{ background:showQuick?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${showQuick?C.gold:"#e8a83855"}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 12px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
+          style={{ background:showQuick?`${C.gold}2e`:`${C.gold}14`, border:`1px solid ${showQuick?C.gold:`${C.gold}55`}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 12px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
           ⚡ Prezzo Rapido
         </button>
 
         <button onClick={()=>setPage("bazar")} title="Listing attivi al bazar"
-          style={{ background:page==="bazar"?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${page==="bazar"?C.gold:"#e8a83855"}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
+          style={{ background:page==="bazar"?`${C.gold}2e`:`${C.gold}14`, border:`1px solid ${page==="bazar"?C.gold:`${C.gold}55`}`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
           🏷️ Bazar
         </button>
 
         <button onClick={()=>setPage("magazzino")} title="Magazzino globale — stock e aging"
-          style={{ background:page==="magazzino"?"rgba(96,165,250,.18)":"rgba(96,165,250,.08)", border:`1px solid ${page==="magazzino"?"#60a5fa":"#60a5fa55"}`, borderRadius:7, color:"#60a5fa", cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
+          style={{ background:page==="magazzino"?`${C.blue}2e`:`${C.blue}14`, border:`1px solid ${page==="magazzino"?C.blue:`${C.blue}55`}`, borderRadius:7, color:C.blue, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
           📦 Magazzino
         </button>
 
@@ -1408,7 +1461,7 @@ export default function App() {
         </button>
 
         <button onClick={()=>setShowSettings(true)} title="Impostazioni"
-          style={{ background:showSettings?"rgba(232,168,56,.18)":"rgba(232,168,56,.08)", border:`1px solid ${showSettings?C.gold:"#e8a83855"}`, borderRadius:7, color:showSettings?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
+          style={{ background:showSettings?`${C.gold}2e`:`${C.gold}14`, border:`1px solid ${showSettings?C.gold:`${C.gold}55`}`, borderRadius:7, color:showSettings?C.gold:C.muted, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag" }}>
           ⚙️ Settings
         </button>
 
@@ -1470,7 +1523,7 @@ export default function App() {
                 <div style={{ display:"flex", gap:3 }}>
                   {[["name","A-Z"],["price","Prezzo"],["signal","Segnale"]].map(([k,l]) => (
                     <button key={k} onClick={()=>setSideSort(k)}
-                      style={{ flex:1, padding:"4px 0", fontSize:11, background:sideSort===k?C.gold:"transparent", color:sideSort===k?"#0f1119":C.muted, border:`1px solid ${sideSort===k?C.gold:C.border}`, borderRadius:4, cursor:"pointer", letterSpacing:.5 }}>
+                      style={{ flex:1, padding:"4px 0", fontSize:11, background:sideSort===k?C.gold:"transparent", color:sideSort===k?C.pillTxt:C.muted, border:`1px solid ${sideSort===k?C.gold:C.border}`, borderRadius:4, cursor:"pointer", letterSpacing:.5 }}>
                       {l}
                     </button>
                   ))}
@@ -1508,14 +1561,14 @@ export default function App() {
                           {!isEsaurito && <span style={{ fontSize:13, color:tColor }}>{trend}</span>}
                         </div>
                       </div>
-                      <div style={{ fontSize:12, color:"#6b7a96", marginTop:2 }}>
+                      <div style={{ fontSize:12, color:C.muted2, marginTop:2 }}>
                         {count} prezzi{cat ? ` · ${cat}` : ""}
                       </div>
                     </div>
                   )
                 })}
               </div>
-              <div style={{ padding:"7px 12px", borderTop:`1px solid ${C.border}`, fontSize:11, color:"#6b7a96", display:"flex", justifyContent:"space-between" }}>
+              <div style={{ padding:"7px 12px", borderTop:`1px solid ${C.border}`, fontSize:11, color:C.muted2, display:"flex", justifyContent:"space-between" }}>
                 <span>{itemNames.length} item</span>
                 <span>{Object.values(data.items).reduce((a,it)=>a+(it.prices?.length||0),0)} prezzi</span>
               </div>
@@ -1613,7 +1666,7 @@ export default function App() {
                           {avgMs != null && <div style={{ fontSize:11, color:C.muted }}>⏱ vendita media: {fmtDurationMs(avgMs)}</div>}
                         </div>
 
-                        <div style={{ fontSize:11, color:"#6b7a96", marginTop:8 }}>{ps.length} prezzi · {ls.length} acquisti · {lsList.length} listing</div>
+                        <div style={{ fontSize:11, color:C.muted2, marginTop:8 }}>{ps.length} prezzi · {ls.length} acquisti · {lsList.length} listing</div>
                       </div>
                     )
                   })}
@@ -1690,7 +1743,7 @@ export default function App() {
 
                   return (<>
                     {/* header row */}
-                    <div style={{ display:"flex", gap:12, padding:"10px 16px", borderBottom:`1px solid ${C.border}`, background:"#0f1119" }}>
+                    <div style={{ display:"flex", gap:12, padding:"10px 16px", borderBottom:`1px solid ${C.border}`, background:C.inputBg }}>
                       {cols.map(c => <Th key={c.k} {...c}/>)}
                     </div>
 
@@ -1700,7 +1753,7 @@ export default function App() {
                       return (
                         <div key={r.name} className="r"
                           onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("prices") }}
-                          style={{ display:"flex", gap:12, padding:"11px 16px", borderBottom:`1px solid ${C.border}`, cursor:"pointer", background:i%2===0?"transparent":"#0f1119", alignItems:"center" }}>
+                          style={{ display:"flex", gap:12, padding:"11px 16px", borderBottom:`1px solid ${C.border}`, cursor:"pointer", background:i%2===0?"transparent":C.inputBg, alignItems:"center" }}>
                           {/* Nome */}
                           <div style={{ width:nameW, minWidth:nameW, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
                           {/* Segnale */}
@@ -1738,7 +1791,7 @@ export default function App() {
                 })()}
               </div>
 
-              <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
+              <div style={{ marginTop:10, fontSize:12, color:C.muted2 }}>
                 {sortedAnalysis.length}{sortedAnalysis.length !== analysisRows.length ? ` / ${analysisRows.length}` : ""} item
               </div>
               </>)}
@@ -1796,7 +1849,7 @@ export default function App() {
                         </div>
                         <div style={{ flex:1, display:"flex", justifyContent:"flex-end", alignItems:"center", gap:5 }} onClick={e => e.stopPropagation()}>
                           {isPartial ? (
-                            <div style={{ display:"flex", alignItems:"center", gap:6, background:"#0f1119", border:`1px solid ${C.border2}`, borderRadius:8, padding:"5px 10px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6, background:C.inputBg, border:`1px solid ${C.border2}`, borderRadius:8, padding:"5px 10px" }}>
                               <span style={{ fontSize:11, color:C.muted }}>Venduti:</span>
                               <input type="number" min="1" max={r.listing.qty-1} value={bazarPartialQty} onChange={e=>setBazarPartialQty(e.target.value)}
                                 onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(bazarPartialQty, 10); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.listingIdx,q) } if(e.key==="Escape"){setBazarPartialKey(null);setBazarPartialQty("")} }}
@@ -1813,7 +1866,7 @@ export default function App() {
                               <button onClick={()=>{ const q=parseInt(bazarPartialQty, 10); if(q>0&&q<r.listing.qty) markBazarListingSold(r.name,r.listingIdx,q) }}
                                 disabled={!bazarPartialQty||isNaN(parseInt(bazarPartialQty, 10))||parseInt(bazarPartialQty, 10)<=0||parseInt(bazarPartialQty, 10)>=r.listing.qty}
                                 style={{ ...pill(!!(bazarPartialQty&&!isNaN(parseInt(bazarPartialQty, 10))&&parseInt(bazarPartialQty, 10)>0&&parseInt(bazarPartialQty, 10)<r.listing.qty), C.green, { padding:"4px 8px", fontSize:11 }) }}>CONFERMA</button>
-                              <button onClick={()=>{setBazarPartialKey(null);setBazarPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
+                              <button onClick={()=>{setBazarPartialKey(null);setBazarPartialQty("")}} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13 }}>✕</button>
                             </div>
                           ) : (
                             <div style={{ display:"flex", gap:4 }}>
@@ -1830,7 +1883,7 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
+              <div style={{ marginTop:10, fontSize:12, color:C.muted2 }}>
                 {bazarOverview.rows.length} listing attivi
               </div>
 
@@ -1862,12 +1915,12 @@ export default function App() {
                           </div>
                         </div>
                         {/* Chart right */}
-                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300 }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, sellTimeData.rows.length * 45)}>
+                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300, maxHeight:600, overflowY:"auto" }}>
+                          <ResponsiveContainer width="100%" height={Math.max(400, Math.min(sellTimeData.rows.length * 45, 560))}>
                             <BarChart data={sellTimeData.chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
-                              <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
-                              <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
-                              <YAxis stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
+                              <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false}/>
+                              <XAxis dataKey="name" stroke={C.border2} tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
+                              <YAxis stroke={C.border2} tick={{ fill:C.muted, fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
                               <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v) => [v + "g", "Durata"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
                               <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Durata"/>
                               <ReferenceLine y={Math.round(sellTimeData.avgDays * 10) / 10} stroke={C.red} strokeWidth={2} strokeDasharray="6 3" label={{ value:`Media: ${(Math.round(sellTimeData.avgDays * 10) / 10)}g`, fill:C.red, fontSize:11, position:"insideTopRight" }}/>
@@ -1942,7 +1995,7 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ marginTop:10, fontSize:12, color:"#6b7a96" }}>
+              <div style={{ marginTop:10, fontSize:12, color:C.muted2 }}>
                 {magazzinoOverview.rows.length} slot · {magazzinoOverview.itemCount} item in magazzino
               </div>
 
@@ -1953,12 +2006,12 @@ export default function App() {
                 {performanceAnalytics.capitalChart.length > 0 && (
                   <div style={{ marginTop:24 }}>
                     <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:12 }}>💰 CAPITALE BLOCCATO PER ITEM</div>
-                    <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
-                      <ResponsiveContainer width="100%" height={Math.max(400, performanceAnalytics.capitalChart.length * 45)}>
+                    <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:16, maxHeight:600, overflowY:"auto" }}>
+                      <ResponsiveContainer width="100%" height={Math.max(400, Math.min(performanceAnalytics.capitalChart.length * 45, 560))}>
                         <BarChart data={performanceAnalytics.capitalChart} margin={{ left:10, right:20, top:5, bottom:5 }}>
-                          <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
-                          <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:11 }} interval={0} angle={-35} textAnchor="end" height={60}/>
-                          <YAxis tickFormatter={fmtG} stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }}/>
+                          <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false}/>
+                          <XAxis dataKey="name" stroke={C.border2} tick={{ fill:C.gold, fontSize:11 }} interval={0} angle={-35} textAnchor="end" height={60}/>
+                          <YAxis tickFormatter={fmtG} stroke={C.border2} tick={{ fill:C.muted, fontSize:11 }}/>
                           <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={v => fmtG(v)} labelStyle={{ color:C.gold, fontWeight:700 }}/>
                           <Bar dataKey="magazzino" stackId="cap" fill="#60a5fa" name="Magazzino" radius={[0,0,0,0]}/>
                           <Bar dataKey="bazar" stackId="cap" fill={C.gold} name="Bazar" radius={[4,4,0,0]}/>
@@ -1994,12 +2047,12 @@ export default function App() {
                           </div>
                         </div>
                         {/* Chart right */}
-                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300 }}>
-                          <ResponsiveContainer width="100%" height={Math.max(400, stagingTimeData.rows.length * 45)}>
+                        <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:14, minHeight:300, maxHeight:600, overflowY:"auto" }}>
+                          <ResponsiveContainer width="100%" height={Math.max(400, Math.min(stagingTimeData.rows.length * 45, 560))}>
                             <BarChart data={stagingTimeData.chartData} margin={{ left:10, right:20, top:5, bottom:5 }}>
-                              <CartesianGrid stroke="#272b3d" strokeDasharray="3 3" vertical={false}/>
-                              <XAxis dataKey="name" stroke="#4b5563" tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
-                              <YAxis stroke="#4b5563" tick={{ fill:"#8895b3", fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
+                              <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false}/>
+                              <XAxis dataKey="name" stroke={C.border2} tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
+                              <YAxis stroke={C.border2} tick={{ fill:C.muted, fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
                               <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v, name) => [v + "g", name === "media" ? "Media item" : "Max lotto"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
                               <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Max lotto"/>
                               <Bar dataKey="media" fill={C.gold} radius={[4,4,0,0]} name="Media item"/>
@@ -2061,7 +2114,7 @@ export default function App() {
                   <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
                     {allNdDiscounts.map(d => (
                       <button key={d} onClick={()=>{ setGlobalNdDisc(d); upd({ ...data, globalNdDisc: d }) }}
-                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?"#f59e0b":C.border):C.border}`, background:globalNdDisc===d?(d>0?"rgba(245,158,11,.18)":"rgba(255,255,255,.05)"):"transparent", color:globalNdDisc===d?(d>0?"#f59e0b":C.text):C.muted }}>
+                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?"#f59e0b":C.border):C.border}`, background:globalNdDisc===d?(d>0?"rgba(245,158,11,.18)":`${C.text}0d`):"transparent", color:globalNdDisc===d?(d>0?"#f59e0b":C.text):C.muted }}>
                         {d === 0 ? "OFF" : `-${d}%`}
                       </button>
                     ))}
@@ -2150,7 +2203,7 @@ export default function App() {
                               const v = parseInt(e.target.value, 10)
                               const updated = { ...it, meta: { ...it.meta, ndDiscount: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
-                            }} style={{ background:"#1c1f2e", border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?"#f59e0b":C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
+                            }} style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?"#f59e0b":C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
                               {allNdDiscounts.map(d => <option key={d} value={d}>{d===0?"—":`-${d}%`}</option>)}
                             </select>
                             {(it.meta?.ndDiscount||0) > 0 && it.meta?.ndCost > 0 && (
@@ -2209,7 +2262,7 @@ export default function App() {
                           const it = { ...data.items[selItem], meta: { ...data.items[selItem].meta, category: cat } }
                           upd({ ...data, items: { ...data.items, [selItem]: it } })
                         }}
-                        style={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, padding:"2px 6px", fontSize:11, cursor:"pointer" }}>
+                        style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, padding:"2px 6px", fontSize:11, cursor:"pointer" }}>
                         {allCategories.map(c => <option key={c} value={c}>{c === "—" ? "Nessuna categoria" : c}</option>)}
                       </select>
                     </div>
@@ -2286,8 +2339,8 @@ export default function App() {
                         </div>
                       ) : (
                         <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-                          {buyT  ? <span style={{ fontSize:13, color:C.green }}>🟢 Compra ≤ {fmtG(buyT)}</span>  : <span style={{ fontSize:12, color:"#6b7a96" }}>Nessun target acquisto</span>}
-                          {sellT ? <span style={{ fontSize:13, color:C.blue  }}>🔵 Vendi ≥ {fmtG(sellT)}</span> : <span style={{ fontSize:12, color:"#6b7a96" }}>Nessun target vendita</span>}
+                          {buyT  ? <span style={{ fontSize:13, color:C.green }}>🟢 Compra ≤ {fmtG(buyT)}</span>  : <span style={{ fontSize:12, color:C.muted2 }}>Nessun target acquisto</span>}
+                          {sellT ? <span style={{ fontSize:13, color:C.blue  }}>🔵 Vendi ≥ {fmtG(sellT)}</span> : <span style={{ fontSize:12, color:C.muted2 }}>Nessun target vendita</span>}
                         </div>
                       )}
                     </div>
@@ -2339,10 +2392,10 @@ export default function App() {
                     {/* Riga secondaria — dati contestuali */}
                     <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                       {secondary.map(s => (
-                        <div key={s.l} title={s.title || ""} style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:7, padding:"7px 11px", flex:"1 1 70px", cursor:s.title?"help":"default" }}>
-                          <div style={{ fontSize:11, color:"#6b7a96", letterSpacing:1.5 }}>{s.l}</div>
+                        <div key={s.l} title={s.title || ""} style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:7, padding:"7px 11px", flex:"1 1 70px", cursor:s.title?"help":"default" }}>
+                          <div style={{ fontSize:11, color:C.muted2, letterSpacing:1.5 }}>{s.l}</div>
                           <div style={{ fontSize:14, color:s.c, fontWeight:700, marginTop:2, fontFamily:"monospace" }}>{s.v}</div>
-                          {s.sub && <div style={{ fontSize:11, color:"#6b7a96", marginTop:1 }}>{s.sub}</div>}
+                          {s.sub && <div style={{ fontSize:11, color:C.muted2, marginTop:1 }}>{s.sub}</div>}
                         </div>
                       ))}
                     </div>
@@ -2415,7 +2468,7 @@ export default function App() {
                           <span style={{ fontSize:13, color:"#a78bfa", fontWeight:700 }}>📭 ESAURITO AL BAZAR</span>
                           {ev.id !== "none" && <span style={{ fontSize:11, color:ev.color }}>{ev.icon} {ev.label}</span>}
                           <span style={{ flex:1 }}/>
-                          <button onClick={()=>delPrice(realIdx)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
+                          <button onClick={()=>delPrice(realIdx)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13 }}>✕</button>
                         </div>
                       )
 
@@ -2427,7 +2480,7 @@ export default function App() {
                           {delta !== null && <span style={{ fontSize:12, color:delta>=0?C.green:C.red, minWidth:70, flexShrink:0 }}>{delta>=0?"+":""}{fmtG(delta)}</span>}
                           {ev.id !== "none" && <span style={{ fontSize:12, color:ev.color, flexShrink:0 }}>{ev.icon} {ev.label}</span>}
                           <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.note}</span>
-                          <button onClick={()=>delPrice(realIdx)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13, flexShrink:0 }}>✕</button>
+                          <button onClick={()=>delPrice(realIdx)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13, flexShrink:0 }}>✕</button>
                         </div>
                       )
                     })}
@@ -2452,7 +2505,7 @@ export default function App() {
                         <div key={s.l} title={s.title||""} style={{ background:C.panel, border:`1px solid ${s.l==="VENDI ALMENO A"?C.gold+"44":C.border}`, borderRadius:9, padding:"9px 13px", flex:"1 1 90px", cursor:s.title?"help":"default" }}>
                           <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>{s.l}</div>
                           <div style={{ fontSize:16, color:s.c, fontWeight:700, marginTop:3, fontFamily:"monospace" }}>{s.v}</div>
-                          {s.sub && <div style={{ fontSize:11, color:"#6b7a96", marginTop:2 }}>{s.sub}</div>}
+                          {s.sub && <div style={{ fontSize:11, color:C.muted2, marginTop:2 }}>{s.sub}</div>}
                         </div>
                       ))}
                     </div>
@@ -2510,7 +2563,7 @@ export default function App() {
                             )}
                             {ev.id !== "none" && <span style={{ fontSize:12, color:ev.color }}>{ev.icon}</span>}
                             <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
-                            <button onClick={()=>delLot(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
+                            <button onClick={()=>delLot(i)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13 }}>✕</button>
                           </div>
                         )
                       })}
@@ -2570,7 +2623,7 @@ export default function App() {
 
                     {/* Lot matching preview */}
                     {lotPreview && lotPreview.links.length > 0 && (
-                      <div style={{ marginTop:12, background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px" }}>
+                      <div style={{ marginTop:12, background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px" }}>
                         <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>LOTTI DAL MAGAZZINO (FIFO)</div>
                         <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
                           {lotPreview.links.map((lk, i) => (
@@ -2636,7 +2689,7 @@ export default function App() {
                             )}
                             {l.buyPrice && <span style={{ fontSize:11, color:C.muted }}>media acq. {fmtG(l.buyPrice)}</span>}
                             {l.lotLinks && l.lotLinks.length > 0 && (
-                              <span style={{ fontSize:11, color:"#6b7a96", flexShrink:0 }} title={l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}>
+                              <span style={{ fontSize:11, color:C.muted2, flexShrink:0 }} title={l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}>
                                 [{l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}]
                               </span>
                             )}
@@ -2646,7 +2699,7 @@ export default function App() {
                             {l.tax > 0 && <span style={{ fontSize:11, color:C.red, flexShrink:0 }}>tasse: {fmtG(l.tax)}</span>}
                             <div style={{ flex:1 }}/>
                             {partialIdx === i ? (
-                              <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, background:"#0f1119", border:`1px solid ${C.border2}`, borderRadius:8, padding:"6px 10px" }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, background:C.inputBg, border:`1px solid ${C.border2}`, borderRadius:8, padding:"6px 10px" }}>
                                 <span style={{ fontSize:11, color:C.muted }}>Venduti:</span>
                                 <input type="number" min="1" max={l.qty-1} value={partialQty} onChange={e=>setPartialQty(e.target.value)}
                                   onKeyDown={e=>{ if(e.key==="Enter"){ const q=parseInt(partialQty, 10); if(q>0&&q<l.qty) markListingSold(i,q) } if(e.key==="Escape"){setPartialIdx(null);setPartialQty("")} }}
@@ -2663,7 +2716,7 @@ export default function App() {
                                 <button onClick={()=>{ const q=parseInt(partialQty, 10); if(q>0&&q<l.qty) markListingSold(i,q) }}
                                   disabled={!partialQty||isNaN(parseInt(partialQty, 10))||parseInt(partialQty, 10)<=0||parseInt(partialQty, 10)>=l.qty}
                                   style={{ ...pill(!!(partialQty&&!isNaN(parseInt(partialQty, 10))&&parseInt(partialQty, 10)>0&&parseInt(partialQty, 10)<l.qty), C.green, { padding:"4px 10px", fontSize:11 }), flexShrink:0 }}>CONFERMA</button>
-                                <button onClick={()=>{setPartialIdx(null);setPartialQty("")}} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:13 }}>✕</button>
+                                <button onClick={()=>{setPartialIdx(null);setPartialQty("")}} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13 }}>✕</button>
                               </div>
                             ) : (
                               <div style={{ display:"flex", gap:4, flexShrink:0 }}>
@@ -2673,7 +2726,7 @@ export default function App() {
                                   style={{ ...pill(false, C.blue, { padding:"5px 10px", fontSize:12 }) }}>½</button>}
                               </div>
                             )}
-                            <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:14, flexShrink:0 }}>✕</button>
+                            <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:14, flexShrink:0 }}>✕</button>
                           </div>
                         )
                       })}
@@ -2690,7 +2743,7 @@ export default function App() {
                           const covered      = l.coveredQty || 0
                           const profitTotal  = covered > 0 ? calcListingProfit(l) : null
                           return (
-                            <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 14px", gap:10, flexWrap:"wrap" }}>
+                            <div key={i} className="r" style={{ display:"flex", alignItems:"center", background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 14px", gap:10, flexWrap:"wrap" }}>
                               <span style={{ fontSize:11, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(l.listedAt)}</span>
                               <span style={{ fontSize:13, color:C.muted, fontFamily:"monospace", fontWeight:700, flexShrink:0 }}>×{l.qty} @ {fmtG(l.listPrice)}</span>
                               <div style={{ display:"flex", flexDirection:"column", flexShrink:0 }}>
@@ -2705,13 +2758,13 @@ export default function App() {
                                 </span>
                               )}
                               {l.lotLinks && l.lotLinks.length > 0 && (
-                                <span style={{ fontSize:11, color:"#6b7a96", flexShrink:0 }}>
+                                <span style={{ fontSize:11, color:C.muted2, flexShrink:0 }}>
                                   [{l.lotLinks.map(lk => `${lk.qty}x${fmtG(lk.unitPrice)}`).join(' + ')}]
                                 </span>
                               )}
                               {l.tax > 0 && <span style={{ fontSize:11, color:C.red, flexShrink:0 }}>tasse: {fmtG(l.tax)}</span>}
                               <div style={{ flex:1 }}/>
-                              <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:"#6b7a96", cursor:"pointer", fontSize:14 }}>✕</button>
+                              <button onClick={()=>delListing(i)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:14 }}>✕</button>
                             </div>
                           )
                         })}
@@ -2774,11 +2827,11 @@ export default function App() {
                     ) : (
                       <ResponsiveContainer width="100%" height={240}>
                         <LineChart data={chartPoints} margin={{ top:5, right:20, left:10, bottom:5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#272b3d"/>
+                          <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
                           <XAxis dataKey="time" stroke={C.muted} tick={{ fontSize:11, fill:C.muted }}/>
                           <YAxis stroke={C.muted} tick={{ fontSize:11, fill:C.muted }} tickFormatter={v=>fmtG(v)}/>
                           <Tooltip
-                            contentStyle={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:8, fontSize:12, color:C.text }}
+                            contentStyle={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:8, fontSize:12, color:C.text }}
                             labelStyle={{ color:C.muted }}
                             formatter={(v,_,p) => [
                               `${v.toLocaleString("it-IT")} ori (${fmtG(v)})${p.payload.eventId&&p.payload.eventId!=="none"?" "+allEVT[p.payload.eventId]?.icon:""}${p.payload.note?" — "+p.payload.note:""}`,
@@ -2803,16 +2856,16 @@ export default function App() {
                   {multiDayChart.length >= 2 && (
                     <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:11, padding:16 }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:3, marginBottom:6 }}>STORICO MULTI-GIORNO — NORMALE vs EVENTO</div>
-                      <div style={{ fontSize:12, color:"#6b7a96", marginBottom:12 }}>
+                      <div style={{ fontSize:12, color:C.muted2, marginBottom:12 }}>
                         Linea oro = media giornaliera · Verde = giorni normali · Arancio = giorni con evento
                       </div>
                       <ResponsiveContainer width="100%" height={220}>
                         <LineChart data={multiDayChart}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#272b3d"/>
+                          <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
                           <XAxis dataKey="day" stroke={C.muted} tick={{ fontSize:11, fill:C.muted }}/>
                           <YAxis stroke={C.muted} tick={{ fontSize:11, fill:C.muted }} tickFormatter={v=>fmtG(v)}/>
                           <Tooltip
-                            contentStyle={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:8, fontSize:12, color:C.text }}
+                            contentStyle={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:8, fontSize:12, color:C.text }}
                             formatter={(v,n) => v!=null ? [`${v.toLocaleString("it-IT")} ori (${fmtG(v)})`, n==="media"?"Media tot":n==="normale"?"Giorni normali":"Giorni evento"] : ["—"]}
                           />
                           <Legend formatter={v=><span style={{ color:C.muted, fontSize:11 }}>{v==="media"?"Media":v==="normale"?"Normale":"Evento"}</span>}/>
@@ -2847,15 +2900,16 @@ export default function App() {
           <div className="up" style={{ width:"80%", height:"80%", maxWidth:900, maxHeight:700, background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, display:"flex", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.6)" }}>
 
             {/* Sidebar sinistra */}
-            <div style={{ width:180, background:"#0f1119", borderRight:`1px solid ${C.border}`, padding:"20px 0", display:"flex", flexDirection:"column", gap:2, flexShrink:0 }}>
+            <div style={{ width:180, background:C.inputBg, borderRight:`1px solid ${C.border}`, padding:"20px 0", display:"flex", flexDirection:"column", gap:2, flexShrink:0 }}>
               <div style={{ padding:"0 16px 14px", fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2 }}>⚙️ SETTINGS</div>
               {[
                 { k:"salvataggio",    l:"💾 Salvataggio" },
                 { k:"strategia",      l:"📊 Strategia"   },
                 { k:"personalizza",   l:"🎨 Personalizza" },
+                { k:"tema",           l:"🌗 Tema" },
               ].map(({ k, l }) => (
                 <div key={k} onClick={()=>setSettingsCategory(k)}
-                  style={{ padding:"10px 16px", fontSize:13, color:settingsCategory===k?C.gold:C.muted, background:settingsCategory===k?"rgba(232,168,56,.1)":"transparent", borderLeft:`3px solid ${settingsCategory===k?C.gold:"transparent"}`, cursor:"pointer", transition:"all .15s", fontWeight:settingsCategory===k?700:400 }}>
+                  style={{ padding:"10px 16px", fontSize:13, color:settingsCategory===k?C.gold:C.muted, background:settingsCategory===k?`${C.gold}1a`:"transparent", borderLeft:`3px solid ${settingsCategory===k?C.gold:"transparent"}`, cursor:"pointer", transition:"all .15s", fontWeight:settingsCategory===k?700:400 }}>
                   {l}
                 </div>
               ))}
@@ -2875,7 +2929,7 @@ export default function App() {
 
                   <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
                     {/* Stato salvataggio */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>STATO SALVATAGGIO</div>
                       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                         <span style={{ fontSize:20 }}>{saveStatus==="saving"?"⏳":saveStatus==="ok"?"✅":saveStatus==="error"?"⚠️":"💾"}</span>
@@ -2889,14 +2943,14 @@ export default function App() {
                     </div>
 
                     {/* Path dati */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>PERCORSO DATI</div>
                       <div style={{ fontSize:13, color:C.text, fontFamily:"monospace", wordBreak:"break-all", marginBottom:10 }}>{dataPath}</div>
                       <button onClick={()=>window.api.openDataFolder()} style={{ ...pill(false, C.gold, { padding:"6px 14px", fontSize:12 }) }}>📁 Apri cartella dati</button>
                     </div>
 
                     {/* Info */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>INFORMAZIONI</div>
                       <div style={{ display:"flex", flexDirection:"column", gap:6, fontSize:13, color:C.muted }}>
                         <div>Versione: <b style={{ color:C.text }}>v{appVersion}</b></div>
@@ -2928,7 +2982,7 @@ export default function App() {
                       const cfg = data?.signalConfig || SIGNAL_DEFAULTS
                       const val = cfg[s.k] ?? SIGNAL_DEFAULTS[s.k]
                       return (
-                        <div key={s.k} style={{ background:"#0f1119", border:`1px solid ${s.color}33`, borderRadius:10, padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
+                        <div key={s.k} style={{ background:C.inputBg, border:`1px solid ${s.color}33`, borderRadius:10, padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
                           <span style={{ fontSize:22 }}>{s.icon}</span>
                           <div style={{ flex:1 }}>
                             <div style={{ fontSize:13, color:s.color, fontWeight:700, letterSpacing:1 }}>{s.label}</div>
@@ -2944,7 +2998,7 @@ export default function App() {
                                 const newCfg = { ...(data?.signalConfig || SIGNAL_DEFAULTS), [s.k]: v }
                                 upd({ ...data, signalConfig: newCfg })
                               }}
-                              style={{ background:"#1c1f2e", border:`1px solid ${C.border2}`, borderRadius:6, color:s.color, padding:"8px 10px", fontSize:16, fontWeight:700, fontFamily:"monospace", width:70, textAlign:"center", outline:"none" }}
+                              style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:6, color:s.color, padding:"8px 10px", fontSize:16, fontWeight:700, fontFamily:"monospace", width:70, textAlign:"center", outline:"none" }}
                             />
                             <span style={{ fontSize:12, color:C.muted, minWidth:110 }}>{s.suffix}</span>
                           </div>
@@ -2973,7 +3027,7 @@ export default function App() {
 
                   <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
                     {/* Trend days */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>GIORNI TREND</div>
                       <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Numero di giorni usati per calcolare la tendenza dei prezzi.</div>
                       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -2987,7 +3041,7 @@ export default function App() {
                     </div>
 
                     {/* Lot strategy */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>STRATEGIA LOTTI</div>
                       <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Come vengono abbinati i lotti dal magazzino quando crei un listing al bazar.</div>
                       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -3001,7 +3055,7 @@ export default function App() {
                     </div>
 
                     {/* Custom categories */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>CATEGORIE PERSONALIZZATE</div>
                       <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Aggiungi categorie extra oltre a quelle predefinite.</div>
                       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
@@ -3023,14 +3077,14 @@ export default function App() {
                     </div>
 
                     {/* Custom ND discounts */}
-                    <div style={{ background:"#0f1119", border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"16px 20px" }}>
                       <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>SCONTI ND PERSONALIZZATI</div>
                       <div style={{ fontSize:12, color:C.muted, marginBottom:10 }}>Aggiungi percentuali di sconto extra per i NosDollari.</div>
                       <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginBottom:10 }}>
                         {allNdDiscounts.map(d => {
                           const isCustom = !ND_DISCOUNTS.includes(d)
                           return (
-                            <span key={d} style={{ display:"inline-flex", alignItems:"center", gap:4, background:isCustom ? "rgba(232,168,56,.1)" : C.panel, border:`1px solid ${isCustom ? C.gold + "55" : C.border2}`, borderRadius:6, padding:"4px 8px", fontSize:12, color:isCustom ? C.gold : C.muted }}>
+                            <span key={d} style={{ display:"inline-flex", alignItems:"center", gap:4, background:isCustom ? `${C.gold}1a` : C.panel, border:`1px solid ${isCustom ? C.gold + "55" : C.border2}`, borderRadius:6, padding:"4px 8px", fontSize:12, color:isCustom ? C.gold : C.muted }}>
                               {d}%
                               {isCustom && <button onClick={() => upd({ ...data, customNdDiscounts: (data.customNdDiscounts || []).filter(v => v !== d) })}
                                 style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:11, padding:0 }}>✕</button>}
@@ -3046,6 +3100,49 @@ export default function App() {
                         <button onClick={() => { const v = parseInt(newNdDiscInput, 10); if (v > 0 && v < 100 && !allNdDiscounts.includes(v)) { upd({ ...data, customNdDiscounts: [...(data.customNdDiscounts || []), v] }); setNewNdDiscInput("") } }}
                           style={pill(!!newNdDiscInput, C.gold, { padding:"7px 14px", fontSize:12 })}>+ Aggiungi</button>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TEMA ── */}
+              {settingsCategory === "tema" && (
+                <div className="up">
+                  <div style={{ fontSize:14, color:C.gold, fontWeight:700, letterSpacing:2, marginBottom:20 }}>🌗 TEMA</div>
+
+                  <div style={{ background:C.inputBg, border:`1px solid ${C.border}`, borderRadius:10, padding:"20px 24px" }}>
+                    <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:12 }}>SELEZIONA TEMA</div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      {[
+                        { id:"dark",  label:"Dark Mode",  icon:"🌙", desc:"Tema scuro — ideale per sessioni notturne",  bg:"#13151f", fg:"#dde6f0", accent:"#e8a838" },
+                        { id:"light", label:"Light Mode", icon:"☀️", desc:"Tema chiaro — migliore leggibilità di giorno", bg:"#e4e7ed", fg:"#111827", accent:"#a06510" },
+                      ].map(t => (
+                        <div key={t.id}
+                          onClick={() => { setTheme(t.id); upd({ ...data, theme: t.id }) }}
+                          style={{ flex:1, border:`2px solid ${theme===t.id?C.gold:C.border2}`, borderRadius:10, padding:16, cursor:"pointer", transition:"all .15s", background:theme===t.id?`${C.gold}11`:"transparent" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                            <span style={{ fontSize:24 }}>{t.icon}</span>
+                            <div>
+                              <div style={{ fontSize:14, color:theme===t.id?C.gold:C.text, fontWeight:700 }}>{t.label}</div>
+                              <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{t.desc}</div>
+                            </div>
+                          </div>
+                          {/* preview */}
+                          <div style={{ background:t.bg, borderRadius:6, padding:10, border:`1px solid ${theme===t.id?C.gold+"55":C.border}` }}>
+                            <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                              <div style={{ width:8, height:8, borderRadius:"50%", background:"#ef4444" }}/>
+                              <div style={{ width:8, height:8, borderRadius:"50%", background:"#f59e0b" }}/>
+                              <div style={{ width:8, height:8, borderRadius:"50%", background:"#22c55e" }}/>
+                            </div>
+                            <div style={{ height:6, width:"60%", background:t.accent, borderRadius:3, marginBottom:4 }}/>
+                            <div style={{ height:4, width:"80%", background:t.fg+"33", borderRadius:2, marginBottom:3 }}/>
+                            <div style={{ height:4, width:"45%", background:t.fg+"22", borderRadius:2 }}/>
+                          </div>
+                          {theme === t.id && (
+                            <div style={{ textAlign:"center", marginTop:8, fontSize:11, color:C.gold, fontWeight:700, letterSpacing:1 }}>ATTIVO</div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -3080,7 +3177,7 @@ export default function App() {
                     {itemNames.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
                   <button onClick={()=>{ if(qItem) navigator.clipboard.writeText(qItem) }} title="Copia nome"
-                    style={{ background:"rgba(232,168,56,.1)", border:`1px solid ${C.gold}55`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"8px 12px", fontSize:13, fontWeight:700, flexShrink:0 }}>
+                    style={{ background:`${C.gold}1a`, border:`1px solid ${C.gold}55`, borderRadius:7, color:C.gold, cursor:"pointer", padding:"8px 12px", fontSize:13, fontWeight:700, flexShrink:0 }}>
                     ⎘
                   </button>
                 </div>
@@ -3138,7 +3235,7 @@ export default function App() {
                 <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>APPENA REGISTRATI</div>
                 <div style={{ display:"flex", flexDirection:"column", gap:3, maxHeight:200, overflowY:"auto" }}>
                   {qRecent.map((r, i) => (
-                    <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:"#0f1119", borderRadius:6, border:`1px solid ${C.border}` }}>
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:C.inputBg, borderRadius:6, border:`1px solid ${C.border}` }}>
                       <span style={{ fontSize:12, color:C.muted, minWidth:100 }}>{fmtTime(new Date(r.ts))}</span>
                       <span style={{ fontSize:13, color:C.gold, fontWeight:700, minWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</span>
                       <span style={{ fontSize:14, color:C.text, fontFamily:"monospace", fontWeight:700 }}>{fmtG(r.price)}</span>
@@ -3168,7 +3265,7 @@ export default function App() {
             {updateStatus === "downloading" && (<>
               <div style={{ fontSize:40, marginBottom:12 }}>📥</div>
               <div style={{ fontSize:16, color:C.text, fontWeight:700, marginBottom:12 }}>Download in corso...</div>
-              <div style={{ width:"100%", height:8, background:"#0f1119", borderRadius:4, overflow:"hidden", marginBottom:8 }}>
+              <div style={{ width:"100%", height:8, background:C.inputBg, borderRadius:4, overflow:"hidden", marginBottom:8 }}>
                 <div style={{ width:`${downloadPct}%`, height:"100%", background:"#ffa726", borderRadius:4, transition:"width .3s" }}/>
               </div>
               <div style={{ fontSize:14, color:"#ffa726", fontWeight:700, fontFamily:"monospace", marginBottom:14 }}>{downloadPct}%</div>
