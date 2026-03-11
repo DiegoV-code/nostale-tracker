@@ -9,11 +9,11 @@ import {
 ═══════════════════════════════════════════════════════ */
 const EVENTS = [
   { id:"none",        label:"Nessun evento",          color:"#3d4a5c", icon:"·"   },
-  { id:"happy_hour",  label:"Happy Hour NosDollari",   color:"#f59e0b", icon:"💰"  },
+  { id:"happy_hour",  label:"Happy Hour NosDollari",   color:C.amber, icon:"💰"  },
   { id:"double_gold", label:"Doppio Oro Drop",         color:"#fbbf24", icon:"🪙"  },
   { id:"double_drop", label:"Doppio Drop Item",        color:"#10b981", icon:"📦"  },
   { id:"double_exp",  label:"EXP Doppia",              color:"#3b82f6", icon:"⭐"  },
-  { id:"double_fata", label:"EXP Fata Doppia",         color:"#a78bfa", icon:"🧚"  },
+  { id:"double_fata", label:"EXP Fata Doppia",         color:C.purple, icon:"🧚"  },
   { id:"upgrade",     label:"Perfezionamento",         color:"#ec4899", icon:"⚗️" },
   { id:"rune",        label:"Evento Rune",             color:"#f97316", icon:"🔮"  },
   { id:"nosmall",     label:"Sconto NosMall",          color:"#06b6d4", icon:"🛍️" },
@@ -185,7 +185,7 @@ function getSignal(it, cfg) {
 
   // Se l'ultima entry è "esaurito", segnala subito
   const lastEntry = prices[prices.length - 1]
-  if (lastEntry?.esaurito) return { type:"esaurito", label:"ESAURITO AL BZ", hint:"Non ci sono item disponibili al bazar. Aspetta che ricompaiano e annota il prezzo.", color:"#a78bfa", bg:"rgba(167,139,250,.12)", icon:"📭", diffPct: null }
+  if (lastEntry?.esaurito) return { type:"esaurito", label:"ESAURITO AL BZ", hint:"Non ci sono item disponibili al bazar. Aspetta che ricompaiano e annota il prezzo.", color:C.purple, bg:`${C.purple}1f`, icon:"📭", diffPct: null }
 
   const vals       = realPrices.map(p => p.price)
   const current    = vals[vals.length - 1]
@@ -202,19 +202,19 @@ function getSignal(it, cfg) {
   const sellTarget = it?.meta?.sellTarget ? parseFloat(it.meta.sellTarget) : null
 
   // Target personalizzati (priorità massima)
-  if (buyTarget  && current <= buyTarget)                 return { type:"buy_target",  label:"COMPRA ★",    hint:"Hai raggiunto il tuo obiettivo di acquisto — è il momento giusto per comprare.",                  color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct }
-  if (sellTarget && openQty > 0 && current >= sellTarget) return { type:"sell_target", label:"VENDI ★",     hint:"Hai raggiunto il tuo obiettivo di vendita — metti in vendita al bazar ora.",                      color:"#3b82f6", bg:"rgba(59,130,246,.12)", icon:"🔵", diffPct }
+  if (buyTarget  && current <= buyTarget)                 return { type:"buy_target",  label:"COMPRA ★",    hint:"Hai raggiunto il tuo obiettivo di acquisto — è il momento giusto per comprare.",                  color:"#10b981", bg:"rgba(16,185,129,.18)", icon:"🟢", diffPct }
+  if (sellTarget && openQty > 0 && current >= sellTarget) return { type:"sell_target", label:"VENDI ★",     hint:"Hai raggiunto il tuo obiettivo di vendita — metti in vendita al bazar ora.",                      color:"#3b82f6", bg:"rgba(59,130,246,.18)", icon:"🔵", diffPct }
 
   // Segnali automatici (soglie configurabili)
   const volNote = vol && vol.cv >= 25 ? " ⚠ Prezzo molto instabile — rischio elevato." : ""
   const stockNote = openQty > 0 ? ` Hai già ×${openQty} in magazzino.` : ""
-  if (diffPct <= -thStrongBuy) return { type:"strong_buy",  label:"FORTE COMPRA", hint:`Il prezzo è molto più basso del solito (−${c.strongBuy ?? 15}%+). Ottimo momento per fare scorta.${stockNote}${volNote}`,                color:"#10b981", bg:"rgba(16,185,129,.12)", icon:"🟢", diffPct, openQty, vol }
-  if (diffPct <= -thBuy)       return { type:"buy",         label:"COMPRA",       hint:`Il prezzo è sotto la media storica. Buon momento per acquistare.${stockNote}${volNote}`,                               color:"#34d399", bg:"rgba(52,211,153,.08)", icon:"🟢", diffPct, openQty, vol }
-  if (diffPct >=  thOverprice) return { type:"overpriced",  label:"TROPPO CARO",  hint:`Il prezzo è molto sopra la media (+${c.overpriced ?? 15}%+). Sconsigliato acquistare — aspetta che scenda.${volNote}`,        color:"#ef4444", bg:"rgba(239,68,68,.10)",  icon:"🔴", diffPct, openQty, vol }
-  if (diffPct >=  thHigh)      return { type:"high",        label:"SOPRA MEDIA",  hint:`Il prezzo è un po' alto rispetto alla media. Meglio aspettare o vendere se hai stock.${volNote}`,          color:"#f97316", bg:"rgba(249,115,22,.08)", icon:"🟠", diffPct, openQty, vol }
+  if (diffPct <= -thStrongBuy) return { type:"strong_buy",  label:"FORTE COMPRA", hint:`Il prezzo è molto più basso del solito (−${c.strongBuy ?? 15}%+). Ottimo momento per fare scorta.${stockNote}${volNote}`,                color:"#10b981", bg:"rgba(16,185,129,.18)", icon:"🟢", diffPct, openQty, vol }
+  if (diffPct <= -thBuy)       return { type:"buy",         label:"COMPRA",       hint:`Il prezzo è sotto la media storica. Buon momento per acquistare.${stockNote}${volNote}`,                               color:"#34d399", bg:"rgba(52,211,153,.15)", icon:"🟢", diffPct, openQty, vol }
+  if (diffPct >=  thOverprice) return { type:"overpriced",  label:"TROPPO CARO",  hint:`Il prezzo è molto sopra la media (+${c.overpriced ?? 15}%+). Sconsigliato acquistare — aspetta che scenda.${volNote}`,        color:"#ef4444", bg:"rgba(239,68,68,.15)",  icon:"🔴", diffPct, openQty, vol }
+  if (diffPct >=  thHigh)      return { type:"high",        label:"SOPRA MEDIA",  hint:`Il prezzo è un po' alto rispetto alla media. Meglio aspettare o vendere se hai stock.${volNote}`,          color:"#f97316", bg:"rgba(249,115,22,.15)", icon:"🟠", diffPct, openQty, vol }
   if (avgBuy && current >= avgBuy * (1 + thSell) && openQty > 0)
-                         return { type:"sell",        label:"VENDI",        hint:`Il prezzo attuale è più alto di quanto hai pagato (+${c.sell ?? 12}%). Valuta di mettere in vendita.`,        color:"#3b82f6", bg:"rgba(59,130,246,.10)", icon:"🔵", diffPct, openQty, vol }
-  return               { type:"hold",          label:"NELLA NORMA",  hint:"Il prezzo è nella media storica. Nessuna azione urgente — monitora e aspetta un'opportunità.",   color:"#f59e0b", bg:"rgba(245,158,11,.08)", icon:"🟡", diffPct, openQty, vol }
+                         return { type:"sell",        label:"VENDI",        hint:`Il prezzo attuale è più alto di quanto hai pagato (+${c.sell ?? 12}%). Valuta di mettere in vendita.`,        color:"#3b82f6", bg:"rgba(59,130,246,.15)", icon:"🔵", diffPct, openQty, vol }
+  return               { type:"hold",          label:"NELLA NORMA",  hint:"Il prezzo è nella media storica. Nessuna azione urgente — monitora e aspetta un'opportunità.",   color:C.amber, bg:`${C.amber}22`, icon:"🟡", diffPct, openQty, vol }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -240,11 +240,11 @@ const LOT_STRATEGIES = [
 const SIGNAL_GROUPS = [
   { id:"__all__",   label:"TUTTI",      color:"#8895b3", types:null },
   { id:"buy",       label:"🟢 COMPRA",  color:"#10b981", types:["strong_buy","buy","buy_target"] },
-  { id:"hold",      label:"🟡 NORMA",   color:"#f59e0b", types:["hold"] },
+  { id:"hold",      label:"🟡 NORMA",   color:C.amber, types:["hold"] },
   { id:"high",      label:"🟠 SOPRA",   color:"#f97316", types:["high"] },
   { id:"overpriced",label:"🔴 CARO",    color:"#ef4444", types:["overpriced"] },
   { id:"sell",      label:"🔵 VENDI",   color:"#3b82f6", types:["sell","sell_target"] },
-  { id:"esaurito",  label:"📭 ESAURITO", color:"#a78bfa", types:["esaurito"] },
+  { id:"esaurito",  label:"📭 ESAURITO", color:C.purple, types:["esaurito"] },
   { id:"nodata",    label:"· POCHI DATI", color:"#5a6a8a", types:["nodata"] },
 ]
 
@@ -307,14 +307,21 @@ const DARK = {
   green:   "#4ade80",
   red:     "#fb7185",
   blue:    "#60a5fa",
+  purple:  "#a78bfa",
+  amber:   "#f59e0b",
+  cyan:    "#06b6d4",
+  orange:  "#f97316",
   inputBg: "#0f1119",
   pillTxt: "#0f1119",
   flat:    "#4b5563",
+  hoverBg: "rgba(255,255,255,.04)",
+  hoverSi: "rgba(232,168,56,.08)",
+  shadow:  "rgba(0,0,0,.3)",
 }
 const LIGHT = {
   bg:      "#e4e7ed",
   panel:   "#f5f6f8",
-  border:  "#b0b8c8",
+  border:  "#6b7a8e",
   border2: "#8e99ad",
   text:    "#111827",
   muted:   "#3d4a5c",
@@ -323,9 +330,16 @@ const LIGHT = {
   green:   "#15803d",
   red:     "#b91c1c",
   blue:    "#1d4ed8",
+  purple:  "#7c3aed",
+  amber:   "#b45309",
+  cyan:    "#0e7490",
+  orange:  "#c2410c",
   inputBg: "#dce1ea",
   pillTxt: "#ffffff",
   flat:    "#6b7280",
+  hoverBg: "rgba(0,0,0,.06)",
+  hoverSi: "rgba(160,101,16,.12)",
+  shadow:  "rgba(0,0,0,.12)",
 }
 let C = DARK
 
@@ -442,7 +456,7 @@ export default function App() {
   const saveTimer = useRef(null)
 
   /* ── ITEM NAMES (must be before useEffect that references it) ── */
-  const itemNames = useMemo(() => Object.keys(data?.items || {}), [data])
+  const itemNames = useMemo(() => Object.keys(data?.items || {}).sort((a,b) => a.localeCompare(b)), [data])
 
   /* ── KEYBOARD SHORTCUTS ── */
   const openQuickRef = useRef(null)
@@ -1410,11 +1424,11 @@ export default function App() {
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:${C.bg}}
         ::-webkit-scrollbar-thumb{background:${C.border2};border-radius:3px}
-        ::-webkit-scrollbar-thumb:hover{background:${theme==="light"?"#7a8494":"#4a5270"}}
+        ::-webkit-scrollbar-thumb:hover{background:${C.muted2}}
         .up{animation:up .2s ease}
-        .r:hover{background:${theme==="light"?"rgba(0,0,0,.04)":"rgba(255,255,255,.04)"}!important;transition:background .12s}
-        .si:hover{background:rgba(${theme==="light"?"184,120,26":"232,168,56"},.08)!important;cursor:pointer}
-        .dc:hover{border-color:${C.gold}66!important;transform:translateY(-2px);box-shadow:0 4px 20px rgba(0,0,0,${theme==="light"?".1":".3"})}
+        .r:hover{background:${C.hoverBg}!important;transition:background .12s}
+        .si:hover{background:${C.hoverSi}!important;cursor:pointer}
+        .dc:hover{border-color:${C.gold}66!important;transform:translateY(-2px);box-shadow:0 4px 20px ${C.shadow}}
         .dc{transition:all .18s}
         input[type=number]::-webkit-inner-spin-button{opacity:.4}
         select option{background:${C.panel};color:${C.text}}
@@ -1452,9 +1466,9 @@ export default function App() {
         </button>
 
         <button onClick={()=>setPage("nd")} title="Calcolo costo Nos Dollari in gold"
-          style={{ background:page==="nd"?"rgba(168,85,247,.18)":"rgba(168,85,247,.08)", border:`1px solid ${page==="nd"?"#a855f7":"#a855f755"}`, borderRadius:7, color:"#a855f7", cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
+          style={{ background:page==="nd"?`${C.purple}2e`:`${C.purple}14`, border:`1px solid ${page==="nd"?C.purple:`${C.purple}55`}`, borderRadius:7, color:C.purple, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, letterSpacing:1, WebkitAppRegion:"no-drag", display:"flex", alignItems:"center", gap:5 }}>
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="10" cy="10" r="9" fill="#a855f7" stroke="#c084fc" strokeWidth="1.5"/>
+            <circle cx="10" cy="10" r="9" fill={C.purple} stroke={C.purple} strokeWidth="1.5"/>
             <text x="10" y="14.5" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#fff" fontFamily="monospace">$</text>
           </svg>
           Nos Dollari
@@ -1547,17 +1561,17 @@ export default function App() {
                   return (
                     <div key={name} className="si"
                       onClick={()=>{ setSelItem(name); setPage("item"); setSubPage("prices"); if(allDays.length) setChartDay(allDays[0]); copyName(name) }}
-                      style={{ padding:"8px 9px", paddingLeft:11, borderRadius:7, background:active?"rgba(245,158,11,.09)":"transparent", border:`1px solid ${active?C.gold+"55":isEsaurito?"#a78bfa33":"transparent"}`, borderLeft:`3px solid ${sig.color}44`, transition:"all .15s", position:"relative" }}>
+                      style={{ padding:"8px 9px", paddingLeft:11, borderRadius:7, background:active?`${C.gold}1a`:"transparent", border:`1px solid ${active?C.gold+"55":isEsaurito?C.purple+"33":"transparent"}`, borderLeft:`3px solid ${sig.color}44`, transition:"all .15s", position:"relative" }}>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                         <span style={{ fontSize:14, color:active?C.gold:C.text, fontWeight:active?700:400, maxWidth:sidebarW - 100, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</span>
                         {isEsaurito
-                          ? <span style={{ fontSize:13, color:"#a78bfa", background:"rgba(167,139,250,.12)", borderRadius:4, padding:"2px 6px" }}>📭</span>
+                          ? <span style={{ fontSize:13, color:C.purple, background:`${C.purple}1f`, borderRadius:4, padding:"2px 6px" }}>📭</span>
                           : sig.type !== "nodata" && <span style={{ fontSize:13, color:sig.color, fontWeight:700 }}>{sig.icon}</span>}
                       </div>
                       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:3 }}>
-                        <span style={{ fontSize:14, color:isEsaurito?"#a78bfa":C.muted, fontFamily:"monospace" }}>{last != null ? fmtG(last) : "—"}</span>
+                        <span style={{ fontSize:14, color:isEsaurito?C.purple:C.muted, fontFamily:"monospace" }}>{last != null ? fmtG(last) : "—"}</span>
                         <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-                          {openQty > 0 && <span style={{ fontSize:13, color:C.blue, background:"rgba(59,130,246,.1)", borderRadius:4, padding:"2px 6px" }}>×{openQty}</span>}
+                          {openQty > 0 && <span style={{ fontSize:13, color:C.blue, background:`${C.blue}1a`, borderRadius:4, padding:"2px 6px" }}>×{openQty}</span>}
                           {!isEsaurito && <span style={{ fontSize:13, color:tColor }}>{trend}</span>}
                         </div>
                       </div>
@@ -1642,7 +1656,7 @@ export default function App() {
                                 </span>
                               )}
                               {trend7 && (
-                                <span style={{ fontSize:11, color:trend7.up?C.green:C.red, background:trend7.up?"rgba(74,222,128,.08)":"rgba(251,113,133,.08)", borderRadius:4, padding:"1px 6px" }}>
+                                <span style={{ fontSize:11, color:trend7.up?C.green:C.red, background:trend7.up?`${C.green}14`:`${C.red}14`, borderRadius:4, padding:"1px 6px" }}>
                                   {trend7.up?"▲":"▼"} {Math.abs(trend7.pct).toFixed(1)}% 7gg
                                 </span>
                               )}
@@ -1653,8 +1667,8 @@ export default function App() {
                         {/* Target lines */}
                         {(buyT || sellT) && (
                           <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
-                            {buyT && <span style={{ fontSize:11, color:C.green, background:"rgba(16,185,129,.1)", borderRadius:4, padding:"2px 7px" }}>🟢 Target acq. {fmtG(buyT)}</span>}
-                            {sellT && <span style={{ fontSize:11, color:C.blue,  background:"rgba(59,130,246,.1)",  borderRadius:4, padding:"2px 7px" }}>🔵 Target vend. {fmtG(sellT)}</span>}
+                            {buyT && <span style={{ fontSize:11, color:C.green, background:`${C.green}1a`, borderRadius:4, padding:"2px 7px" }}>🟢 Target acq. {fmtG(buyT)}</span>}
+                            {sellT && <span style={{ fontSize:11, color:C.blue,  background:`${C.blue}1a`,  borderRadius:4, padding:"2px 7px" }}>🔵 Target vend. {fmtG(sellT)}</span>}
                           </div>
                         )}
 
@@ -1939,7 +1953,7 @@ export default function App() {
                               <XAxis dataKey="name" stroke={C.border2} tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
                               <YAxis stroke={C.border2} tick={{ fill:C.muted, fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
                               <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v) => [v + "g", "Durata"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
-                              <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Durata"/>
+                              <Bar dataKey="giorni" fill={C.blue} radius={[4,4,0,0]} name="Durata"/>
                               <ReferenceLine y={Math.round(sellTimeData.avgDays * 10) / 10} stroke={C.red} strokeWidth={2} strokeDasharray="6 3" label={{ value:`Media: ${(Math.round(sellTimeData.avgDays * 10) / 10)}g`, fill:C.red, fontSize:11, position:"insideTopRight" }}/>
                             </BarChart>
                           </ResponsiveContainer>
@@ -1985,6 +1999,7 @@ export default function App() {
                     <div style={{ width:75, flexShrink:0, textAlign:"right" }}>ETÀ</div>
                     <div style={{ flex:1, textAlign:"right" }}>DATA</div>
                   </div>
+                  <div style={{ maxHeight:500, overflowY:"auto" }}>
                   {[...magazzinoOverview.rows].sort((a,b) => b.ageDays - a.ageDays).map((r, ri) => {
                     const ageColor = r.ageDays >= 7 ? C.red : r.ageDays >= 3 ? C.gold : C.green
                     const ageLabel = fmtAge(r.ageDays * 86400000)
@@ -2009,6 +2024,7 @@ export default function App() {
                       </div>
                     )
                   })}
+                  </div>
                 </div>
               )}
 
@@ -2030,7 +2046,7 @@ export default function App() {
                           <XAxis dataKey="name" stroke={C.border2} tick={{ fill:C.gold, fontSize:11 }} interval={0} angle={-35} textAnchor="end" height={60}/>
                           <YAxis tickFormatter={fmtG} stroke={C.border2} tick={{ fill:C.muted, fontSize:11 }}/>
                           <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={v => fmtG(v)} labelStyle={{ color:C.gold, fontWeight:700 }}/>
-                          <Bar dataKey="magazzino" stackId="cap" fill="#60a5fa" name="Magazzino" radius={[0,0,0,0]}/>
+                          <Bar dataKey="magazzino" stackId="cap" fill={C.blue} name="Magazzino" radius={[0,0,0,0]}/>
                           <Bar dataKey="bazar" stackId="cap" fill={C.gold} name="Bazar" radius={[4,4,0,0]}/>
                           <Legend formatter={v => <span style={{ color:C.muted, fontSize:11 }}>{v}</span>}/>
                         </BarChart>
@@ -2071,7 +2087,7 @@ export default function App() {
                               <XAxis dataKey="name" stroke={C.border2} tick={{ fill:C.gold, fontSize:10 }} interval={0} angle={-30} textAnchor="end" height={55}/>
                               <YAxis stroke={C.border2} tick={{ fill:C.muted, fontSize:11 }} label={{ value:"giorni", angle:-90, position:"insideLeft", fill:C.muted, fontSize:11 }}/>
                               <Tooltip contentStyle={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:8 }} formatter={(v, name) => [v + "g", name === "media" ? "Media item" : "Max lotto"]} labelStyle={{ color:C.gold, fontWeight:700 }}/>
-                              <Bar dataKey="giorni" fill="#60a5fa" radius={[4,4,0,0]} name="Max lotto"/>
+                              <Bar dataKey="giorni" fill={C.blue} radius={[4,4,0,0]} name="Max lotto"/>
                               <Bar dataKey="media" fill={C.gold} radius={[4,4,0,0]} name="Media item"/>
                               <Legend formatter={v => <span style={{ color:C.muted, fontSize:11 }}>{v}</span>}/>
                             </BarChart>
@@ -2091,7 +2107,7 @@ export default function App() {
             <div className="up">
               <div style={{ fontSize:12, color:C.muted, letterSpacing:3, marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
                 <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="10" cy="10" r="9" fill="#a855f7" stroke="#c084fc" strokeWidth="1.5"/>
+                  <circle cx="10" cy="10" r="9" fill={C.purple} stroke={C.purple} strokeWidth="1.5"/>
                   <text x="10" y="14.5" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#fff" fontFamily="monospace">$</text>
                 </svg>
                 NOS DOLLARI
@@ -2126,12 +2142,12 @@ export default function App() {
                 </div>
 
                 {/* Event discount selector */}
-                <div style={{ flex:"0 0 200px", background:C.panel, border:`1px solid ${globalNdDisc>0?"#f59e0b":C.border}`, borderRadius:10, padding:"14px 16px", transition:"all .15s" }}>
+                <div style={{ flex:"0 0 200px", background:C.panel, border:`1px solid ${globalNdDisc>0?C.amber:C.border}`, borderRadius:10, padding:"14px 16px", transition:"all .15s" }}>
                   <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:6 }}>SCONTO EVENTO</div>
                   <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
                     {allNdDiscounts.map(d => (
                       <button key={d} onClick={()=>{ setGlobalNdDisc(d); upd({ ...data, globalNdDisc: d }) }}
-                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?"#f59e0b":C.border):C.border}`, background:globalNdDisc===d?(d>0?"rgba(245,158,11,.18)":`${C.text}0d`):"transparent", color:globalNdDisc===d?(d>0?"#f59e0b":C.text):C.muted }}>
+                        style={{ padding:"3px 8px", fontSize:11, fontWeight:700, borderRadius:4, cursor:"pointer", border:`1px solid ${globalNdDisc===d?(d>0?C.amber:C.border):C.border}`, background:globalNdDisc===d?(d>0?`${C.amber}2e`:`${C.text}0d`):"transparent", color:globalNdDisc===d?(d>0?C.amber:C.text):C.muted }}>
                         {d === 0 ? "OFF" : `-${d}%`}
                       </button>
                     ))}
@@ -2174,7 +2190,7 @@ export default function App() {
                       onClick={()=>{ setSelItem(r.name); setPage("item"); setSubPage("prices") }}
                       style={{ display:"flex", alignItems:"center", background:C.panel, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", gap:6, cursor:"pointer" }}>
                       <div style={{ width:160, flexShrink:0, fontSize:13, color:C.gold, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
-                      <div style={{ width:80, flexShrink:0, fontSize:14, color:r.disc>0?"#f59e0b":C.text, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>
+                      <div style={{ width:80, flexShrink:0, fontSize:14, color:r.disc>0?C.amber:C.text, fontWeight:700, fontFamily:"monospace", textAlign:"right" }}>
                         {r.useCost > 0 ? r.useCost : "—"}
                         {r.disc > 0 && r.useCost !== r.ndCost && <span style={{ fontSize:9, color:C.muted, display:"block", textDecoration:"line-through" }}>{r.ndCost}</span>}
                       </div>
@@ -2215,16 +2231,16 @@ export default function App() {
                             }} onKeyDown={e => { if(e.key==="Enter") e.target.blur() }} placeholder="1" style={inp({ width:60, padding:"4px 8px", fontSize:12, textAlign:"center" })}/>
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ fontSize:11, color:"#f59e0b" }}>sconto:</span>
+                            <span style={{ fontSize:11, color:C.amber }}>sconto:</span>
                             <select value={it.meta?.ndDiscount || 0} onChange={e => {
                               const v = parseInt(e.target.value, 10)
                               const updated = { ...it, meta: { ...it.meta, ndDiscount: v } }
                               upd({ ...data, items: { ...data.items, [r.name]: updated } })
-                            }} style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?"#f59e0b":C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
+                            }} style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:4, color:(it.meta?.ndDiscount||0)>0?C.amber:C.muted, padding:"4px 6px", fontSize:11, cursor:"pointer" }}>
                               {allNdDiscounts.map(d => <option key={d} value={d}>{d===0?"—":`-${d}%`}</option>)}
                             </select>
                             {(it.meta?.ndDiscount||0) > 0 && it.meta?.ndCost > 0 && (
-                              <span style={{ fontSize:11, color:"#f59e0b", fontFamily:"monospace" }}>= {Math.ceil(it.meta.ndCost * (1 - (it.meta.ndDiscount)/100))} ND</span>
+                              <span style={{ fontSize:11, color:C.amber, fontFamily:"monospace" }}>= {Math.ceil(it.meta.ndCost * (1 - (it.meta.ndDiscount)/100))} ND</span>
                             )}
                           </div>
                         </div>
@@ -2294,7 +2310,7 @@ export default function App() {
                   ].map(({ k, l }) => (
                     <button key={k} onClick={()=>setSubPage(k)} style={pill(subPage===k, C.gold, { padding:"7px 13px", fontSize:11 })}>{l}</button>
                   ))}
-                  <button onClick={exportCSV} style={pill(false,"#06b6d4",{ padding:"7px 11px", fontSize:11 })}>⬇ CSV</button>
+                  <button onClick={exportCSV} style={pill(false,C.cyan,{ padding:"7px 11px", fontSize:11 })}>⬇ CSV</button>
                   <button onClick={()=>delItem(selItem)} style={pill(false,C.red,{ padding:"7px 11px", fontSize:11 })}>🗑</button>
                 </div>
               </div>
@@ -2366,7 +2382,7 @@ export default function App() {
                 const trend7 = calcTrend(prices, trendDays)
                 const vol    = calcVolatility(prices)
                 const primary = [
-                  { l: allStats.isEsaurito ? "ULTIMO PREZZO NOTO" : "PREZZO ATTUALE", v:fmtG(allStats.current), c:allStats.isEsaurito?"#a78bfa":C.gold, big:true },
+                  { l: allStats.isEsaurito ? "ULTIMO PREZZO NOTO" : "PREZZO ATTUALE", v:fmtG(allStats.current), c:allStats.isEsaurito?C.purple:C.gold, big:true },
                   { l:"MEDIA STORICA",  v:fmtG(allStats.avg), c:C.text },
                   { l:"MINIMO STORICO", v:fmtG(allStats.min), c:C.green },
                   { l:"MASSIMO STORICO",v:fmtG(allStats.max), c:C.red  },
@@ -2378,7 +2394,7 @@ export default function App() {
                       ? (allStats.avgEvent > allStats.avgNormal ? "▲ sale con eventi" : "▼ scende con eventi")
                       : "nessun evento registrato" },
                   allStats.esauritoCount > 0
-                    ? { l:"ESAURITO",   v:allStats.esauritoCount+"×",  c:"#a78bfa", sub:"volte segnalato" }
+                    ? { l:"ESAURITO",   v:allStats.esauritoCount+"×",  c:C.purple, sub:"volte segnalato" }
                     : null,
                   trend7
                     ? { l:`TREND ${trend7.days}GG`, v:`${trend7.pct>=0?"+":""}${trend7.pct.toFixed(1)}%`, c:trend7.up?C.green:C.red,
@@ -2439,17 +2455,17 @@ export default function App() {
                       </button>
                       <button onClick={recordEsaurito}
                         title="Segna che al momento non ci sono item disponibili al bazar"
-                        style={{ ...pill(false,"#a78bfa",{ padding:"8px 14px", flexShrink:0 }) }}>
+                        style={{ ...pill(false,C.purple,{ padding:"8px 14px", flexShrink:0 }) }}>
                         📭 ESAURITO AL BZ
                       </button>
                     </div>
 
                     {/* Banner esaurito attivo */}
                     {allStats?.isEsaurito && (
-                      <div style={{ marginTop:12, background:"rgba(167,139,250,.1)", border:"1px solid #a78bfa55", borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ marginTop:12, background:`${C.purple}1a`, border:`1px solid ${C.purple}55`, borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
                         <span style={{ fontSize:20 }}>📭</span>
                         <div>
-                          <div style={{ fontSize:13, color:"#a78bfa", fontWeight:700 }}>ESAURITO AL BAZAR</div>
+                          <div style={{ fontSize:13, color:C.purple, fontWeight:700 }}>ESAURITO AL BAZAR</div>
                           <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Nessun item disponibile al momento · Ultimo prezzo noto: <b style={{color:C.text}}>{fmtG(allStats.current)}</b></div>
                         </div>
                         <div style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>
@@ -2472,9 +2488,9 @@ export default function App() {
 
                       // Voce ESAURITO
                       if (p.esaurito) return (
-                        <div key={stableKey} className="r" style={{ display:"flex", alignItems:"center", background:"rgba(167,139,250,.06)", border:"1px solid #a78bfa33", borderRadius:6, padding:"7px 12px", gap:10 }}>
+                        <div key={stableKey} className="r" style={{ display:"flex", alignItems:"center", background:`${C.purple}0f`, border:`1px solid ${C.purple}33`, borderRadius:6, padding:"7px 12px", gap:10 }}>
                           <span style={{ fontSize:12, color:C.muted, minWidth:118, flexShrink:0 }}>{fmtFull(p.timestamp)}</span>
-                          <span style={{ fontSize:13, color:"#a78bfa", fontWeight:700 }}>📭 ESAURITO AL BAZAR</span>
+                          <span style={{ fontSize:13, color:C.purple, fontWeight:700 }}>📭 ESAURITO AL BAZAR</span>
                           {ev.id !== "none" && <span style={{ fontSize:11, color:ev.color }}>{ev.icon} {ev.label}</span>}
                           <span style={{ flex:1 }}/>
                           <button onClick={()=>delPrice(realIdx)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13 }}>✕</button>
@@ -2488,7 +2504,7 @@ export default function App() {
                           <span style={{ fontSize:12, color:C.muted, minWidth:80, fontFamily:"monospace", flexShrink:0 }}>{p.price.toLocaleString("it-IT")}</span>
                           {delta !== null && <span style={{ fontSize:12, color:delta>=0?C.green:C.red, minWidth:70, flexShrink:0 }}>{delta>=0?"+":""}{fmtG(delta)}</span>}
                           {ev.id !== "none" && <span style={{ fontSize:12, color:ev.color, flexShrink:0 }}>{ev.icon} {ev.label}</span>}
-                          <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.note}</span>
+                          <span style={{ fontSize:12, color:C.muted2, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.note}</span>
                           <button onClick={()=>delPrice(realIdx)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13, flexShrink:0 }}>✕</button>
                         </div>
                       )
@@ -2571,7 +2587,7 @@ export default function App() {
                               </span>
                             )}
                             {ev.id !== "none" && <span style={{ fontSize:12, color:ev.color }}>{ev.icon}</span>}
-                            <span style={{ fontSize:12, color:"#7b8ba6", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
+                            <span style={{ fontSize:12, color:C.muted2, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.note}</span>
                             <button onClick={()=>delLot(i)} style={{ background:"none", border:"none", color:C.muted2, cursor:"pointer", fontSize:13 }}>✕</button>
                           </div>
                         )
@@ -2880,7 +2896,7 @@ export default function App() {
                           <Legend formatter={v=><span style={{ color:C.muted, fontSize:11 }}>{v==="media"?"Media":v==="normale"?"Normale":"Evento"}</span>}/>
                           <Line type="monotone" dataKey="media"   stroke={C.gold}  strokeWidth={2}   dot={(p)=>{const{cx,cy,payload}=p;return<circle key={`m${cx}`} cx={cx} cy={cy} r={payload.hasEvent?7:4} fill={payload.hasEvent?C.gold:C.panel} stroke={C.gold} strokeWidth={2}/>}}/>
                           <Line type="monotone" dataKey="normale" stroke={C.green} strokeWidth={1.5} strokeDasharray="5 3" dot={false}/>
-                          <Line type="monotone" dataKey="evento"  stroke="#f97316" strokeWidth={1.5} strokeDasharray="5 3" dot={false}/>
+                          <Line type="monotone" dataKey="evento"  stroke={C.orange} strokeWidth={1.5} strokeDasharray="5 3" dot={false}/>
                         </LineChart>
                       </ResponsiveContainer>
                       {allStats?.avgEvent && allStats?.avgNormal && (
@@ -2906,7 +2922,7 @@ export default function App() {
         <div
           onClick={e => { if (e.target === e.currentTarget) setShowSettings(false) }}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9997 }}>
-          <div className="up" style={{ width:"80%", height:"80%", maxWidth:900, maxHeight:700, background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, display:"flex", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,.6)" }}>
+          <div className="up" style={{ width:"80%", height:"80%", maxWidth:900, maxHeight:700, background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, display:"flex", overflow:"hidden", boxShadow:`0 20px 60px ${C.shadow}` }}>
 
             {/* Sidebar sinistra */}
             <div style={{ width:180, background:C.inputBg, borderRight:`1px solid ${C.border}`, padding:"20px 0", display:"flex", flexDirection:"column", gap:2, flexShrink:0 }}>
@@ -3166,7 +3182,7 @@ export default function App() {
         <div
           onClick={e => { if (e.target === e.currentTarget) setShowQuick(false) }}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9999 }}>
-          <div className="up" style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, padding:24, width:520, maxWidth:"95vw", boxShadow:"0 20px 60px rgba(0,0,0,.6)" }}>
+          <div className="up" style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, padding:24, width:520, maxWidth:"95vw", boxShadow:`0 20px 60px ${C.shadow}` }}>
 
             {/* header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
@@ -3261,7 +3277,7 @@ export default function App() {
       {/* ══ UPDATE POPUP ══ */}
       {(updateStatus === "available" || updateStatus === "downloading" || updateStatus === "downloaded" || updateStatus === "error") && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9998 }}>
-          <div className="up" style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, padding:28, width:400, maxWidth:"90vw", boxShadow:"0 20px 60px rgba(0,0,0,.6)", textAlign:"center" }}>
+          <div className="up" style={{ background:C.panel, border:`1px solid ${C.border2}`, borderRadius:14, padding:28, width:400, maxWidth:"90vw", boxShadow:`0 20px 60px ${C.shadow}`, textAlign:"center" }}>
 
             {updateStatus === "available" && (<>
               <div style={{ fontSize:40, marginBottom:12 }}>⬇️</div>
@@ -3275,9 +3291,9 @@ export default function App() {
               <div style={{ fontSize:40, marginBottom:12 }}>📥</div>
               <div style={{ fontSize:16, color:C.text, fontWeight:700, marginBottom:12 }}>Download in corso...</div>
               <div style={{ width:"100%", height:8, background:C.inputBg, borderRadius:4, overflow:"hidden", marginBottom:8 }}>
-                <div style={{ width:`${downloadPct}%`, height:"100%", background:"#ffa726", borderRadius:4, transition:"width .3s" }}/>
+                <div style={{ width:`${downloadPct}%`, height:"100%", background:C.amber, borderRadius:4, transition:"width .3s" }}/>
               </div>
-              <div style={{ fontSize:14, color:"#ffa726", fontWeight:700, fontFamily:"monospace", marginBottom:14 }}>{downloadPct}%</div>
+              <div style={{ fontSize:14, color:C.amber, fontWeight:700, fontFamily:"monospace", marginBottom:14 }}>{downloadPct}%</div>
               <button onClick={() => setUpdateStatus(null)}
                 style={{ ...pill(false, C.muted), padding:"6px 16px", fontSize:12 }}>CHIUDI</button>
             </>)}
