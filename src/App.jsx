@@ -1686,6 +1686,19 @@ export default function App() {
                 </div>
               ) : (<>
 
+              {/* KPI */}
+              {(() => {
+                const tot = analysisRows.reduce((a, r) => a + (r.totalProfit || 0), 0)
+                return (
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:10, background:C.panel, border:`1px solid ${tot >= 0 ? C.green : C.red}44`, borderRadius:10, padding:"12px 20px" }}>
+                      <span style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>GUADAGNO TOTALE</span>
+                      <span style={{ fontSize:20, fontWeight:700, fontFamily:"monospace", color:tot >= 0 ? C.green : C.red }}>{tot >= 0 ? "+" : ""}{fmtG(tot)}</span>
+                    </div>
+                  </div>
+                )
+              })()}
+
               {/* Search + signal filters */}
               <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
                 <input value={analSearch} onChange={e => setAnalSearch(e.target.value)} placeholder="Cerca item..."
@@ -1831,6 +1844,7 @@ export default function App() {
                     <div style={{ width:90, flexShrink:0, textAlign:"right" }}>DA</div>
                     <div style={{ flex:1, textAlign:"right" }}>AZIONI</div>
                   </div>
+                  <div style={{ maxHeight:500, overflowY:"auto" }}>
                   {bazarOverview.rows.map((r, ri) => {
                     const bKey = `${r.name}|${r.listingIdx}`
                     const isPartial = bazarPartialKey === bKey
@@ -1880,6 +1894,7 @@ export default function App() {
                       </div>
                     )
                   })}
+                  </div>
                 </div>
               )}
 
@@ -1901,6 +1916,7 @@ export default function App() {
                             <div style={{ flex:1 }}>ITEM</div>
                             <div style={{ width:120, textAlign:"right" }}>DURATA</div>
                           </div>
+                          <div style={{ maxHeight:500, overflowY:"auto", display:"flex", flexDirection:"column", gap:3 }}>
                           {sellTimeData.rows.map(r => {
                             const col = r.days >= 7 ? C.red : r.days >= 3 ? C.gold : C.green
                             return (
@@ -1910,6 +1926,7 @@ export default function App() {
                               </div>
                             )
                           })}
+                          </div>
                           <div style={{ fontSize:11, color:C.muted, marginTop:4, textAlign:"right", paddingRight:10 }}>
                             Media: <b style={{ color:C.gold }}>{fmtAge(sellTimeData.avgDays * 86400000)}</b>
                           </div>
@@ -2316,34 +2333,30 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Target prezzi */}
-                    <div style={{ background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 16px", flex:1, minWidth:200 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2 }}>TARGET PERSONALI</div>
-                        <button onClick={()=>{ setShowTargetEdit(v=>!v); setTBuy(buyT?String(buyT):""); setTSell(sellT?String(sellT):"") }}
-                          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:5, color:C.muted, cursor:"pointer", fontSize:11, padding:"2px 8px" }}>
-                          {showTargetEdit?"chiudi":"✏️ modifica"}
-                        </button>
-                      </div>
-                      {showTargetEdit ? (
-                        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                          <div style={{ flex:"1 1 120px" }}>
-                            <div style={{ fontSize:11, color:C.green, marginBottom:3 }}>🟢 COMPRA SE ≤</div>
-                            <input value={tBuy} onChange={e=>setTBuy(e.target.value)} placeholder="es. 120k" style={inp({ padding:"5px 8px", fontSize:13 })}/>
+                    {/* KPI acquisto / vendita */}
+                    {(() => {
+                      const ls = listings || []
+                      const soldWithBuy = ls.filter(l => l.sold && l.buyPrice != null)
+                      const avgBuy  = soldWithBuy.length ? soldWithBuy.reduce((a,l) => a + l.buyPrice, 0) / soldWithBuy.length : null
+                      const avgSell = soldWithBuy.length ? soldWithBuy.reduce((a,l) => a + l.listPrice, 0) / soldWithBuy.length : null
+                      const marginPct = avgBuy && avgSell ? ((avgSell - avgBuy) / avgBuy) * 100 : null
+                      return (
+                        <div style={{ display:"flex", gap:8, flex:1, minWidth:200 }}>
+                          <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 16px", textAlign:"center" }}>
+                            <div style={{ fontSize:11, color:C.muted, letterSpacing:1.5, marginBottom:4 }}>MEDIA ACQUISTO</div>
+                            <div style={{ fontSize:18, fontWeight:700, fontFamily:"monospace", color:avgBuy != null ? C.red : C.muted }}>{avgBuy != null ? fmtG(Math.round(avgBuy)) : "—"}</div>
                           </div>
-                          <div style={{ flex:"1 1 120px" }}>
-                            <div style={{ fontSize:11, color:C.blue, marginBottom:3 }}>🔵 VENDI SE ≥</div>
-                            <input value={tSell} onChange={e=>setTSell(e.target.value)} placeholder="es. 180k" style={inp({ padding:"5px 8px", fontSize:13 })}/>
+                          <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 16px", textAlign:"center" }}>
+                            <div style={{ fontSize:11, color:C.muted, letterSpacing:1.5, marginBottom:4 }}>MEDIA VENDITA</div>
+                            <div style={{ fontSize:18, fontWeight:700, fontFamily:"monospace", color:avgSell != null ? C.green : C.muted }}>{avgSell != null ? fmtG(Math.round(avgSell)) : "—"}</div>
                           </div>
-                          <button onClick={saveTargets} style={{ ...pill(true, C.gold, { padding:"5px 14px", fontSize:12 }) }}>SALVA</button>
+                          <div style={{ flex:1, background:C.panel, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 16px", textAlign:"center" }}>
+                            <div style={{ fontSize:11, color:C.muted, letterSpacing:1.5, marginBottom:4 }}>MARGINE %</div>
+                            <div style={{ fontSize:18, fontWeight:700, fontFamily:"monospace", color:marginPct != null ? (marginPct >= 0 ? C.green : C.red) : C.muted }}>{marginPct != null ? `${marginPct >= 0 ? "+" : ""}${marginPct.toFixed(1)}%` : "—"}</div>
+                          </div>
                         </div>
-                      ) : (
-                        <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-                          {buyT  ? <span style={{ fontSize:13, color:C.green }}>🟢 Compra ≤ {fmtG(buyT)}</span>  : <span style={{ fontSize:12, color:C.muted2 }}>Nessun target acquisto</span>}
-                          {sellT ? <span style={{ fontSize:13, color:C.blue  }}>🔵 Vendi ≥ {fmtG(sellT)}</span> : <span style={{ fontSize:12, color:C.muted2 }}>Nessun target vendita</span>}
-                        </div>
-                      )}
-                    </div>
+                      )
+                    })()}
                   </div>
                 )
               })()}
@@ -2420,10 +2433,6 @@ export default function App() {
                         {pVal && !isNaN(parseG(pVal)) && (
                           <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>= {parseG(pVal).toLocaleString("it-IT")} ori · {fmtG(parseG(pVal))}</div>
                         )}
-                      </div>
-                      <div style={{ flex:"1 1 180px" }}>
-                        <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:5 }}>NOTA</div>
-                        <input value={pNote} onChange={e=>setPNote(e.target.value)} onKeyDown={e=>e.key==="Enter"&&recordPrice()} placeholder="es. dump, raro, rialzo..." style={inp()}/>
                       </div>
                       <button onClick={recordPrice} disabled={!pVal||isNaN(parseG(pVal))} style={{ ...pill(!!(pVal&&!isNaN(parseG(pVal)))), padding:"8px 22px", flexShrink:0 }}>
                         SALVA
