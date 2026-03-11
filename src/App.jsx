@@ -9,11 +9,11 @@ import {
 ═══════════════════════════════════════════════════════ */
 const EVENTS = [
   { id:"none",        label:"Nessun evento",          color:"#3d4a5c", icon:"·"   },
-  { id:"happy_hour",  label:"Happy Hour NosDollari",   color:C.amber, icon:"💰"  },
+  { id:"happy_hour",  label:"Happy Hour NosDollari",   color:"#f59e0b", icon:"💰"  },
   { id:"double_gold", label:"Doppio Oro Drop",         color:"#fbbf24", icon:"🪙"  },
   { id:"double_drop", label:"Doppio Drop Item",        color:"#10b981", icon:"📦"  },
   { id:"double_exp",  label:"EXP Doppia",              color:"#3b82f6", icon:"⭐"  },
-  { id:"double_fata", label:"EXP Fata Doppia",         color:C.purple, icon:"🧚"  },
+  { id:"double_fata", label:"EXP Fata Doppia",         color:"#a78bfa", icon:"🧚"  },
   { id:"upgrade",     label:"Perfezionamento",         color:"#ec4899", icon:"⚗️" },
   { id:"rune",        label:"Evento Rune",             color:"#f97316", icon:"🔮"  },
   { id:"nosmall",     label:"Sconto NosMall",          color:"#06b6d4", icon:"🛍️" },
@@ -240,11 +240,11 @@ const LOT_STRATEGIES = [
 const SIGNAL_GROUPS = [
   { id:"__all__",   label:"TUTTI",      color:"#8895b3", types:null },
   { id:"buy",       label:"🟢 COMPRA",  color:"#10b981", types:["strong_buy","buy","buy_target"] },
-  { id:"hold",      label:"🟡 NORMA",   color:C.amber, types:["hold"] },
+  { id:"hold",      label:"🟡 NORMA",   color:"#f59e0b", types:["hold"] },
   { id:"high",      label:"🟠 SOPRA",   color:"#f97316", types:["high"] },
   { id:"overpriced",label:"🔴 CARO",    color:"#ef4444", types:["overpriced"] },
   { id:"sell",      label:"🔵 VENDI",   color:"#3b82f6", types:["sell","sell_target"] },
-  { id:"esaurito",  label:"📭 ESAURITO", color:C.purple, types:["esaurito"] },
+  { id:"esaurito",  label:"📭 ESAURITO", color:"#a78bfa", types:["esaurito"] },
   { id:"nodata",    label:"· POCHI DATI", color:"#5a6a8a", types:["nodata"] },
 ]
 
