@@ -930,14 +930,133 @@
 
 /* ── Recipe bar ── */
 .recipeBar {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-  padding: 14px 18px; margin-bottom: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
 }
-.recipeTitle { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--gold); margin-bottom: 10px; }
-.recipeContent { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-.recipeIngs { display: flex; flex-wrap: wrap; gap: 6px 14px; flex: 1; min-width: 200px; }
-.recipeIng { font-size: 12px; white-space: nowrap; }
-.recipeKpis { display: flex; gap: 16px; flex-wrap: wrap; }
-.recipeKpi { text-align: center; min-width: 90px; }
-.recipeKpiLabel { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: var(--muted); margin-bottom: 2px; }
-.recipeKpiValue { font-size: 15px; font-weight: 700; font-family: monospace; }
+
+.recipeHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.recipeTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--gold);
+}
+
+.recipeYield {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Ingredients table */
+.recipeTable {
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.recipeTableHead {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--input-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+}
+
+.recipeTableRow {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  font-family: monospace;
+}
+
+.recipeTableRow:last-child {
+  border-bottom: none;
+}
+
+.recipeColName {
+  flex: 2;
+  min-width: 120px;
+}
+
+.recipeColSource {
+  flex: 1;
+  min-width: 70px;
+  text-align: center;
+}
+
+.recipeColQty {
+  flex: 0 0 60px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.recipeColUnit {
+  flex: 1;
+  min-width: 90px;
+  text-align: right;
+}
+
+.recipeColTotal {
+  flex: 1;
+  min-width: 90px;
+  text-align: right;
+}
+
+.recipeSourceBadge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+/* KPI cards */
+.recipeKpis {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.recipeKpiCard {
+  flex: 1 1 100px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid;
+  border-radius: 8px;
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.recipeKpiLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.recipeKpiValue {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: monospace;
+}

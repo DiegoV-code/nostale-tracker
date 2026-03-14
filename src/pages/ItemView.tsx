@@ -298,42 +298,59 @@ export default memo(function ItemView({
         const unitCraft = craftCost != null && recipe.craftQty > 0 ? Math.round(craftCost / recipe.craftQty) : null
         const lastPrice = allStats?.current ?? null
         const profit = unitCraft != null && lastPrice != null ? lastPrice - unitCraft : null
+        const marginPct = unitCraft != null && lastPrice != null && unitCraft > 0 ? ((lastPrice - unitCraft) / unitCraft) * 100 : null
         return (
           <div className={s.recipeBar}>
-            <div className={s.recipeTitle}>🔨 RICETTA</div>
-            <div className={s.recipeContent}>
-              <div className={s.recipeIngs}>
-                {ingDetails.map((ing, i) => (
-                  <span key={i} className={s.recipeIng}>
-                    <span style={{ color: C.blue, fontWeight: 700 }}>×{ing.qty}</span>{" "}
-                    <span style={{ color: C.text }}>{ing.itemName}</span>{" "}
-                    <span style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
-                      ({ing.source}{ing.totalP != null ? ` ${fmtG(ing.totalP)}` : ""})
+            <div className={s.recipeHeader}>
+              <span className={s.recipeTitle}>🔨 RICETTA</span>
+              {recipe.craftQty > 1 && <span className={s.recipeYield}>Produce ×{recipe.craftQty} per craft</span>}
+            </div>
+
+            {/* Ingredients table */}
+            <div className={s.recipeTable}>
+              <div className={s.recipeTableHead}>
+                <span className={s.recipeColName}>INGREDIENTE</span>
+                <span className={s.recipeColSource}>FONTE</span>
+                <span className={s.recipeColQty}>QTÀ</span>
+                <span className={s.recipeColUnit}>PREZZO UN.</span>
+                <span className={s.recipeColTotal}>TOTALE</span>
+              </div>
+              {ingDetails.map((ing, i) => (
+                <div key={i} className={s.recipeTableRow}>
+                  <span className={s.recipeColName} style={{ color: C.text, fontWeight: 600 }}>{ing.itemName}</span>
+                  <span className={s.recipeColSource}>
+                    <span className={s.recipeSourceBadge} style={{ background: ing.source === "NPC" ? `${C.purple}22` : ing.source === "Bazar" ? `${C.gold}22` : `${C.muted}22`, color: ing.source === "NPC" ? C.purple : ing.source === "Bazar" ? C.gold : C.muted, border: `1px solid ${ing.source === "NPC" ? C.purple : ing.source === "Bazar" ? C.gold : C.muted}44` }}>
+                      {ing.source}
                     </span>
                   </span>
-                ))}
+                  <span className={s.recipeColQty} style={{ color: C.blue }}>×{ing.qty}</span>
+                  <span className={s.recipeColUnit}>{ing.unitP != null ? fmtG(ing.unitP) : "—"}</span>
+                  <span className={s.recipeColTotal} style={{ color: C.text, fontWeight: 700 }}>{ing.totalP != null ? fmtG(ing.totalP) : "—"}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* KPI cards */}
+            <div className={s.recipeKpis}>
+              <div className={s.recipeKpiCard} style={{ borderColor: `${C.gold}44` }}>
+                <div className={s.recipeKpiLabel}>COSTO CRAFT</div>
+                <div className={s.recipeKpiValue} style={{ color: C.gold }}>{unitCraft != null ? fmtG(unitCraft) : "—"}</div>
               </div>
-              <div className={s.recipeKpis}>
-                <div className={s.recipeKpi}>
-                  <div className={s.recipeKpiLabel}>COSTO CRAFT</div>
-                  <div className={s.recipeKpiValue} style={{ color: C.gold }}>{unitCraft != null ? fmtG(unitCraft) : "—"}</div>
+              <div className={s.recipeKpiCard} style={{ borderColor: `${C.text}22` }}>
+                <div className={s.recipeKpiLabel}>PREZZO ATTUALE</div>
+                <div className={s.recipeKpiValue} style={{ color: C.text }}>{lastPrice != null ? fmtG(lastPrice) : "—"}</div>
+              </div>
+              <div className={s.recipeKpiCard} style={{ borderColor: profit != null ? (profit >= 0 ? `${C.green}44` : `${C.red}44`) : `${C.muted}22` }}>
+                <div className={s.recipeKpiLabel}>PROFITTO CRAFT</div>
+                <div className={s.recipeKpiValue} style={{ color: profit != null ? (profit >= 0 ? C.green : C.red) : C.muted }}>
+                  {profit != null ? `${profit >= 0 ? "+" : ""}${fmtG(profit)}` : "—"}
                 </div>
-                <div className={s.recipeKpi}>
-                  <div className={s.recipeKpiLabel}>PREZZO ATTUALE</div>
-                  <div className={s.recipeKpiValue} style={{ color: C.text }}>{lastPrice != null ? fmtG(lastPrice) : "—"}</div>
+              </div>
+              <div className={s.recipeKpiCard} style={{ borderColor: marginPct != null ? (marginPct >= 0 ? `${C.green}44` : `${C.red}44`) : `${C.muted}22` }}>
+                <div className={s.recipeKpiLabel}>MARGINE %</div>
+                <div className={s.recipeKpiValue} style={{ color: marginPct != null ? (marginPct >= 0 ? C.green : C.red) : C.muted }}>
+                  {marginPct != null ? `${marginPct >= 0 ? "+" : ""}${marginPct.toFixed(1)}%` : "—"}
                 </div>
-                <div className={s.recipeKpi}>
-                  <div className={s.recipeKpiLabel}>PROFITTO CRAFT</div>
-                  <div className={s.recipeKpiValue} style={{ color: profit != null ? (profit >= 0 ? C.green : C.red) : C.muted }}>
-                    {profit != null ? `${profit >= 0 ? "+" : ""}${fmtG(profit)}` : "—"}
-                  </div>
-                </div>
-                {recipe.craftQty > 1 && (
-                  <div className={s.recipeKpi}>
-                    <div className={s.recipeKpiLabel}>PRODUCE</div>
-                    <div className={s.recipeKpiValue} style={{ color: C.blue }}>×{recipe.craftQty}</div>
-                  </div>
-                )}
               </div>
             </div>
           </div>

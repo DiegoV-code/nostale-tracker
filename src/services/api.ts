@@ -29,3 +29,6 @@ export const onUpdateDownloaded = (cb: () => void): (() => void) | undefined => 
 export const onUpdateError      = (cb: (msg: string) => void): (() => void) | undefined => ipc().onUpdateError?.(cb)
 
 export const flushAndInstallUpdate = (data: AppData): Promise<void> => ipc().flushAndInstallUpdate(data)
+
+/* ── Native confirm dialog (no focus steal) ── */
+export const confirm = (msg: string): Promise<boolean> => ipc().confirm?.(msg) ?? Promise.resolve(window.confirm(msg))

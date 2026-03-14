@@ -72,6 +72,14 @@ ipcMain.on('win-maximize', () => win?.isMaximized() ? win.unmaximize() : win?.ma
 ipcMain.on('win-close',    () => win?.close())
 
 ipcMain.handle('get-version', () => app.getVersion())
+ipcMain.handle('confirm-dialog', (_, msg) => {
+  const result = dialog.showMessageBoxSync(win, {
+    type: 'question', buttons: ['OK', 'Annulla'], defaultId: 0, cancelId: 1,
+    title: 'Conferma', message: msg.replace(/⚠️\s*/g, '').split('\n')[0],
+    detail: msg.includes('\n') ? msg.split('\n').slice(1).join('\n').trim() : undefined,
+  })
+  return result === 0
+})
 ipcMain.handle('flush-and-install', (_, data) => {
   // Flush any pending data to disk before installing update
   if (data) {

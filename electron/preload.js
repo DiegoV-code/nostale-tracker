@@ -23,4 +23,5 @@ contextBridge.exposeInMainWorld('api', {
   onDownloadProgress: onChannel('download-progress', (info) => info),
   onUpdateError:      onChannel('update-error', (msg) => msg),
   flushAndInstallUpdate: (data) => ipcRenderer.invoke('flush-and-install', data),
+  confirm:              (msg)  => ipcRenderer.invoke('confirm-dialog', msg),
 })

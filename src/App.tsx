@@ -33,9 +33,6 @@ declare module "react" {
   }
 }
 
-// Electron bug: window.confirm() ruba il focus dal webContents, gli input smettono di funzionare
-function safeConfirm(msg: string): boolean { const r = window.confirm(msg); setTimeout(() => window.focus(), 0); return r }
-
 // getSignal wrapper: passa C (palette) come terzo argomento
 function getSignal(it: Item | null | undefined, cfg: SignalConfig | null | undefined): Signal { return _getSignal(it, cfg, C) }
 
@@ -123,6 +120,16 @@ export default function App() {
   const [updateStatus, setUpdateStatus] = useState<string | null>(null) // null | "available" | "downloading" | "downloaded" | "error"
   const [downloadPct, setDownloadPct] = useState(0)
   const [updateError, setUpdateError] = useState("")
+
+  // Custom confirm modal
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null)
+  const confirmResolve = useRef<((v: boolean) => void) | null>(null)
+  const showConfirm = useCallback((msg: string): Promise<boolean> => {
+    return new Promise(resolve => { confirmResolve.current = resolve; setConfirmMsg(msg) })
+  }, [])
+  const handleConfirm = useCallback((yes: boolean) => {
+    confirmResolve.current?.(yes); confirmResolve.current = null; setConfirmMsg(null)
+  }, [])
 
   // theme
   const [theme, setTheme] = useState(() => localStorage.getItem("nostale-theme") || "dark")
@@ -806,7 +813,7 @@ export default function App() {
     setSelItem(n); setPage("item"); setSubPage("prices")
   }
 
-  const recordPrice = () => {
+  const recordPrice = async () => {
     const price = parseG(pVal)
     if (!selItem || isNaN(price) || price <= 0) return
     // Anomaly check: usa dataRef per dati freschi
@@ -818,10 +825,10 @@ export default function App() {
       const devPct = Math.abs(price - avg) / avg
       if (devPct > 0.40) {
         const dir = price > avg ? "sopra" : "sotto"
-        if (!safeConfirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+        if (!await showConfirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
-    // Ri-leggi dataRef DOPO il confirm (il dialog blocca il thread, lo stato potrebbe essere cambiato)
+    // Ri-leggi dataRef DOPO il confirm (il dialog è async, lo stato potrebbe essere cambiato)
     const d = dataRef.current || data!
     const curPrices = d.items[selItem!]?.prices || []
     const entry: PriceEntry = { price: Math.round(price), timestamp: new Date().toISOString(), eventId: curEventId, note: pNote.trim() }
@@ -841,8 +848,8 @@ export default function App() {
     upd({ ...d, items: { ...d.items, [selItem]: it } })
   }
 
-  const delPrice = useCallback((idx: number) => {
-    if (!safeConfirm("Eliminare questa registrazione di prezzo?")) return
+  const delPrice = useCallback(async (idx: number) => {
+    if (!await showConfirm("Eliminare questa registrazione di prezzo?")) return
     const d = dataRef.current!
     const si = selItemRef.current!
     const curPrices = d.items[si]?.prices || []
@@ -850,7 +857,7 @@ export default function App() {
     upd({ ...d, items: { ...d.items, [si]: it } })
   }, [upd])
 
-  const recordLot = () => {
+  const recordLot = async () => {
     const qty   = parseInt(lQty, 10)
     const price = parseG(lPrice)
     if (!selItem || isNaN(qty) || qty <= 0 || qty > 999 || isNaN(price) || price <= 0) return
@@ -862,7 +869,7 @@ export default function App() {
       const devPct = Math.abs(roundedPrice - avg) / avg
       if (devPct > 0.40) {
         const dir = roundedPrice > avg ? "sopra" : "sotto"
-        if (!safeConfirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+        if (!await showConfirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
     // Se esiste un lotto aperto con lo stesso prezzo e c'è spazio, somma le quantità
@@ -881,7 +888,7 @@ export default function App() {
     setLQty(""); setLPrice("")
   }
 
-  const delLot = useCallback((idx: number) => {
+  const delLot = useCallback(async (idx: number) => {
     const d = dataRef.current!
     const si = selItemRef.current!
     const curLots = d.items[si]?.lots || []
@@ -889,7 +896,7 @@ export default function App() {
     const lot = curLots[idx]
     const linkedListings = curListings.filter((l: Listing) => !l.sold && l.lotLinks?.some(lk => lk.lotId === lot.id))
     if (linkedListings.length > 0) {
-      if (!safeConfirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
+      if (!await showConfirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
     }
     const cleanedListings = curListings.map((l: Listing) => {
       if (l.sold || !l.lotLinks) return l
@@ -904,8 +911,8 @@ export default function App() {
     upd({ ...d, items: { ...d.items, [si]: it } })
   }, [upd])
 
-  const delItem = useCallback((name: string) => {
-    if (!safeConfirm(`Eliminare "${name}" e tutti i suoi dati?`)) return
+  const delItem = useCallback(async (name: string) => {
+    if (!await showConfirm(`Eliminare "${name}" e tutti i suoi dati?`)) return
     const d = dataRef.current!
     const items = { ...d.items }
     delete items[name]
@@ -1758,6 +1765,26 @@ export default function App() {
               </button>
             </>)}
 
+        </Modal>
+      )}
+      {/* ══ CONFIRM MODAL ══ */}
+      {confirmMsg && (
+        <Modal open={true} width={420} maxWidth="90vw" padding={0} zIndex={10000}>
+          <div style={{ padding:"28px 32px", textAlign:"center" }}>
+            <div style={{ fontSize:32, marginBottom:12 }}>⚠️</div>
+            <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:8, lineHeight:1.5 }}>
+              {confirmMsg.split('\n')[0]}
+            </div>
+            {confirmMsg.includes('\n') && (
+              <div style={{ fontSize:12, color:C.muted, marginBottom:16, lineHeight:1.6, whiteSpace:"pre-line" }}>
+                {confirmMsg.split('\n').slice(1).join('\n').trim()}
+              </div>
+            )}
+            <div style={{ display:"flex", gap:10, justifyContent:"center", marginTop:20 }}>
+              <button onClick={()=>handleConfirm(false)} style={{ ...pill(false, C.muted, { padding:"10px 24px", fontSize:13, minWidth:100 }) }}>ANNULLA</button>
+              <button onClick={()=>handleConfirm(true)} autoFocus style={{ ...pill(true, C.gold, { padding:"10px 24px", fontSize:13, minWidth:100 }) }}>CONFERMA</button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

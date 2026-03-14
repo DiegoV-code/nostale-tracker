@@ -29,4 +29,5 @@ export interface ElectronApi {
   onUpdateDownloaded?(cb: () => void): () => void
   onUpdateError?(cb: (msg: string) => void): () => void
   flushAndInstallUpdate(data: AppData): Promise<void>
+  confirm?(msg: string): Promise<boolean>
 }
