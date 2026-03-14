@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react"
 
-export type PageId = "dashboard" | "item" | "new" | "analisi" | "bazar" | "magazzino" | "nd"
+export type PageId = "dashboard" | "item" | "new" | "analisi" | "bazar" | "magazzino" | "nd" | "crafting"
 export type SubPageId = "prices" | "magazzino" | "vendite" | "charts"
 
 export interface NavigationContextValue {

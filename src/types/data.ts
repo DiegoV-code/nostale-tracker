@@ -41,6 +41,17 @@ export interface Listing {
   lotsConsumed: boolean
 }
 
+export interface RecipeIngredient {
+  itemName: string
+  qty: number
+  fixedPrice?: number   // prezzo NPC fisso — se assente, usa ultimo prezzo tracciato
+}
+
+export interface Recipe {
+  ingredients: RecipeIngredient[]
+  craftQty: number      // quanti item produce la ricetta
+}
+
 export interface ItemMeta {
   category?: string
   buyTarget?: number | null
@@ -48,6 +59,7 @@ export interface ItemMeta {
   ndCost?: number
   ndQty?: number
   ndDiscount?: number
+  recipe?: Recipe
 }
 
 export interface Item {

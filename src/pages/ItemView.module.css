@@ -927,3 +927,17 @@
 .flexShrink0 {
   flex-shrink: 0;
 }
+
+/* ── Recipe bar ── */
+.recipeBar {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 18px; margin-bottom: 12px;
+}
+.recipeTitle { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--gold); margin-bottom: 10px; }
+.recipeContent { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.recipeIngs { display: flex; flex-wrap: wrap; gap: 6px 14px; flex: 1; min-width: 200px; }
+.recipeIng { font-size: 12px; white-space: nowrap; }
+.recipeKpis { display: flex; gap: 16px; flex-wrap: wrap; }
+.recipeKpi { text-align: center; min-width: 90px; }
+.recipeKpiLabel { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: var(--muted); margin-bottom: 2px; }
+.recipeKpiValue { font-size: 15px; font-weight: 700; font-family: monospace; }

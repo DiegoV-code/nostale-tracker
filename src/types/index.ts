@@ -1,6 +1,7 @@
 export type {
   PriceEntry, Lot, LotLink, Listing, ItemMeta, Item,
   SignalConfig, EventDef, QuickRecentEntry, LotStrategy, AppData,
+  RecipeIngredient, Recipe,
 } from "./data"
 
 export type { Palette } from "./theme"

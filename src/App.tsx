@@ -18,6 +18,7 @@ import Analisi from "./pages/Analisi"
 import Bazar from "./pages/Bazar"
 import Magazzino from "./pages/Magazzino"
 import NdCalc from "./pages/NdCalc"
+import Crafting from "./pages/Crafting"
 import ItemView from "./pages/ItemView"
 import type { AppData, Item, PriceEntry, Lot, LotLink, Listing, SignalConfig, EventDef } from "./types"
 import type { Signal, SignalType, TrendResult, Volatility } from "./types"
@@ -32,8 +33,8 @@ declare module "react" {
   }
 }
 
-// Electron bug: confirm() ruba il focus dal webContents, gli input smettono di funzionare
-function confirm(msg: string): boolean { const r = confirm(msg); setTimeout(() => window.focus(), 0); return r }
+// Electron bug: window.confirm() ruba il focus dal webContents, gli input smettono di funzionare
+function safeConfirm(msg: string): boolean { const r = window.confirm(msg); setTimeout(() => window.focus(), 0); return r }
 
 // getSignal wrapper: passa C (palette) come terzo argomento
 function getSignal(it: Item | null | undefined, cfg: SignalConfig | null | undefined): Signal { return _getSignal(it, cfg, C) }
@@ -817,7 +818,7 @@ export default function App() {
       const devPct = Math.abs(price - avg) / avg
       if (devPct > 0.40) {
         const dir = price > avg ? "sopra" : "sotto"
-        if (!confirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+        if (!safeConfirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
     // Ri-leggi dataRef DOPO il confirm (il dialog blocca il thread, lo stato potrebbe essere cambiato)
@@ -841,7 +842,7 @@ export default function App() {
   }
 
   const delPrice = useCallback((idx: number) => {
-    if (!confirm("Eliminare questa registrazione di prezzo?")) return
+    if (!safeConfirm("Eliminare questa registrazione di prezzo?")) return
     const d = dataRef.current!
     const si = selItemRef.current!
     const curPrices = d.items[si]?.prices || []
@@ -861,7 +862,7 @@ export default function App() {
       const devPct = Math.abs(roundedPrice - avg) / avg
       if (devPct > 0.40) {
         const dir = roundedPrice > avg ? "sopra" : "sotto"
-        if (!confirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+        if (!safeConfirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
     // Se esiste un lotto aperto con lo stesso prezzo e c'è spazio, somma le quantità
@@ -888,7 +889,7 @@ export default function App() {
     const lot = curLots[idx]
     const linkedListings = curListings.filter((l: Listing) => !l.sold && l.lotLinks?.some(lk => lk.lotId === lot.id))
     if (linkedListings.length > 0) {
-      if (!confirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
+      if (!safeConfirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
     }
     const cleanedListings = curListings.map((l: Listing) => {
       if (l.sold || !l.lotLinks) return l
@@ -904,7 +905,7 @@ export default function App() {
   }, [upd])
 
   const delItem = useCallback((name: string) => {
-    if (!confirm(`Eliminare "${name}" e tutti i suoi dati?`)) return
+    if (!safeConfirm(`Eliminare "${name}" e tutti i suoi dati?`)) return
     const d = dataRef.current!
     const items = { ...d.items }
     delete items[name]
@@ -1190,6 +1191,12 @@ export default function App() {
           📦 Magazzino
         </button>
 
+        <button onClick={()=>setPage("crafting")} title="Gestione ricette crafting"
+          className={a.titlebarBtnFlex}
+          style={{ background:page==="crafting"?`${C.orange}2e`:`${C.orange}14`, border:`1px solid ${page==="crafting"?C.orange:`${C.orange}55`}`, color:C.orange, WebkitAppRegion:"no-drag" }}>
+          🔨 Crafting
+        </button>
+
         <button onClick={()=>setPage("nd")} title="Calcolo costo Nos Dollari in gold"
           className={a.titlebarBtnFlex}
           style={{ background:page==="nd"?`${C.purple}2e`:`${C.purple}14`, border:`1px solid ${page==="nd"?C.purple:`${C.purple}55`}`, color:C.purple, WebkitAppRegion:"no-drag" }}>
@@ -1332,6 +1339,9 @@ export default function App() {
 
           {/* ── MAGAZZINO PAGE ── */}
           {page === "magazzino" && <Magazzino magazzinoOverview={magazzinoOverview} performanceAnalytics={performanceAnalytics} stagingTimeData={stagingTimeData}/>}
+
+          {/* ── CRAFTING PAGE ── */}
+          {page === "crafting" && <Crafting/>}
 
           {/* ── NOS DOLLARI PAGE ── */}
           {page === "nd" && <NdCalc ndRateInput={ndRateInput} setNdRateInput={setNdRateInput} ndBuyQty={ndBuyQty} setNdBuyQty={setNdBuyQty} globalNdDisc={globalNdDisc} setGlobalNdDisc={setGlobalNdDisc} allNdDiscounts={allNdDiscounts} ndItems={ndItems}/>}

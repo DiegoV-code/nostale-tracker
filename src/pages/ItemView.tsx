@@ -277,6 +277,69 @@ export default memo(function ItemView({
         )
       })()}
 
+      {/* ── RECIPE CRAFT COST ── */}
+      {item?.meta?.recipe && (() => {
+        const recipe = item.meta.recipe!
+        let craftCost: number | null = 0
+        const ingDetails = recipe.ingredients.map(ing => {
+          let unitP: number | null = null
+          let source: "NPC" | "Bazar" | "?" = "?"
+          if (ing.fixedPrice != null) { unitP = ing.fixedPrice; source = "NPC" }
+          else {
+            const ps = data.items[ing.itemName]?.prices || []
+            const real = ps.filter((p: any) => !p.esaurito)
+            unitP = real.length ? real[real.length - 1].price : null
+            source = data.items[ing.itemName] ? "Bazar" : "?"
+          }
+          if (unitP == null) craftCost = null
+          else if (craftCost != null) craftCost += unitP * ing.qty
+          return { ...ing, unitP, totalP: unitP != null ? unitP * ing.qty : null, source }
+        })
+        const unitCraft = craftCost != null && recipe.craftQty > 0 ? Math.round(craftCost / recipe.craftQty) : null
+        const lastPrice = allStats?.current ?? null
+        const profit = unitCraft != null && lastPrice != null ? lastPrice - unitCraft : null
+        return (
+          <div className={s.recipeBar}>
+            <div className={s.recipeTitle}>🔨 RICETTA</div>
+            <div className={s.recipeContent}>
+              <div className={s.recipeIngs}>
+                {ingDetails.map((ing, i) => (
+                  <span key={i} className={s.recipeIng}>
+                    <span style={{ color: C.blue, fontWeight: 700 }}>×{ing.qty}</span>{" "}
+                    <span style={{ color: C.text }}>{ing.itemName}</span>{" "}
+                    <span style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
+                      ({ing.source}{ing.totalP != null ? ` ${fmtG(ing.totalP)}` : ""})
+                    </span>
+                  </span>
+                ))}
+              </div>
+              <div className={s.recipeKpis}>
+                <div className={s.recipeKpi}>
+                  <div className={s.recipeKpiLabel}>COSTO CRAFT</div>
+                  <div className={s.recipeKpiValue} style={{ color: C.gold }}>{unitCraft != null ? fmtG(unitCraft) : "—"}</div>
+                </div>
+                <div className={s.recipeKpi}>
+                  <div className={s.recipeKpiLabel}>PREZZO ATTUALE</div>
+                  <div className={s.recipeKpiValue} style={{ color: C.text }}>{lastPrice != null ? fmtG(lastPrice) : "—"}</div>
+                </div>
+                <div className={s.recipeKpi}>
+                  <div className={s.recipeKpiLabel}>PROFITTO CRAFT</div>
+                  <div className={s.recipeKpiValue} style={{ color: profit != null ? (profit >= 0 ? C.green : C.red) : C.muted }}>
+                    {profit != null ? `${profit >= 0 ? "+" : ""}${fmtG(profit)}` : "—"}
+                  </div>
+                </div>
+                {recipe.craftQty > 1 && (
+                  <div className={s.recipeKpi}>
+                    <div className={s.recipeKpiLabel}>PRODUCE</div>
+                    <div className={s.recipeKpiValue} style={{ color: C.blue }}>×{recipe.craftQty}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ── STATS BAR ── */}
       {allStats && (() => {
         const trend7 = calcTrend(prices, trendDays)
