@@ -1,0 +1,290 @@
+/* Bazar — listing table, sell-time analytics, charts */
+
+/* ── Section labels ── */
+.sectionLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+}
+
+.sectionLabelSellTime {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 12px;
+}
+
+/* ── Empty state ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 250px;
+  gap: 12px;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  opacity: .08;
+}
+
+.emptyText {
+  color: var(--muted);
+  letter-spacing: 3px;
+  font-size: 12px;
+}
+
+/* ── Table layout ── */
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tableScroll {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* ── Table header row ── */
+.headerRow {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.hItem    { width: 150px; flex-shrink: 0; }
+.hQty     { width: 55px;  flex-shrink: 0; text-align: right; }
+.hPrice   { width: 95px;  flex-shrink: 0; text-align: right; }
+.hTotal   { width: 95px;  flex-shrink: 0; text-align: right; }
+.hCost    { width: 95px;  flex-shrink: 0; text-align: right; }
+.hTax     { width: 75px;  flex-shrink: 0; text-align: right; }
+.hAge     { width: 90px;  flex-shrink: 0; text-align: right; }
+.hActions { flex: 1;      text-align: right; }
+
+/* ── Table data row ── */
+.row {
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.rowName {
+  width: 150px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowQty {
+  width: 55px;
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--blue);
+  font-weight: 700;
+  font-family: monospace;
+  text-align: right;
+}
+
+.rowPrice {
+  width: 95px;
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--gold);
+  font-weight: 700;
+  font-family: monospace;
+  text-align: right;
+}
+
+.rowTotal {
+  width: 95px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-family: monospace;
+  text-align: right;
+}
+
+.rowCost {
+  width: 95px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-family: monospace;
+  text-align: right;
+}
+
+.rowTax {
+  width: 75px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-family: monospace;
+  text-align: right;
+}
+
+.rowAge {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-family: monospace;
+  text-align: right;
+}
+
+/* ── Actions column ── */
+.actionsCol {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+}
+
+.actionsDefault {
+  display: flex;
+  gap: 4px;
+}
+
+/* ── Partial-sell bar ── */
+.partialBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 5px 10px;
+}
+
+.partialLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.partialMax {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.partialProfit {
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--muted2);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* ── Footer count ── */
+.listingCount {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted2);
+}
+
+/* ── Sell-time section ── */
+.sellTimeSection {
+  margin-top: 20px;
+}
+
+.sellTimeLayout {
+  display: flex;
+  gap: 16px;
+}
+
+/* ── Sell-time table (left) ── */
+.stTable {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stHeaderRow {
+  display: flex;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.stHeaderItem { flex: 1; }
+.stHeaderDur  { width: 120px; text-align: right; }
+
+.stScroll {
+  max-height: 500px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stRow {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.stRowName {
+  flex: 1;
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stRowDur {
+  width: 120px;
+  text-align: right;
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.stAvg {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: right;
+  padding-right: 10px;
+}
+
+.stAvgVal {
+  color: var(--gold);
+}
+
+/* ── Sell-time chart (right) ── */
+.stChart {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 300px;
+  max-height: 600px;
+  overflow-y: auto;
+}

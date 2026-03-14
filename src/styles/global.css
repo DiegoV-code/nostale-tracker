@@ -1,0 +1,32 @@
+/* ═══════════════════════════════════════════════════════
+   Global styles — reset, keyframes, scrollbar, hover classes
+   Uses CSS custom properties from theme.css
+═══════════════════════════════════════════════════════ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); overflow: hidden; }
+
+/* ── Keyframes ── */
+@keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@keyframes up    { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Focus ── */
+input:focus, select:focus { border-color: var(--gold) !important; outline: none; }
+
+/* ── Scrollbar (Webkit/Electron) ── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: var(--bg); }
+::-webkit-scrollbar-thumb  { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted2); }
+
+/* ── Shared hover / animation classes ── */
+.up { animation: up .2s ease; }
+.r:hover  { background: var(--hover-bg) !important; transition: background .12s; }
+.si:hover { background: var(--hover-si) !important; cursor: pointer; }
+.dc       { transition: all .18s; }
+.dc:hover { border-color: color-mix(in srgb, var(--gold) 40%, transparent) !important; transform: translateY(-2px); box-shadow: 0 4px 20px var(--shadow); }
+
+/* ── Form tweaks ── */
+input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+select option { background: var(--panel); color: var(--text); }

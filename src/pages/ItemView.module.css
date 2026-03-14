@@ -1,0 +1,929 @@
+/* ═══════════════════════════════════════════════════════
+   ItemView — CSS Module
+   Sections: Header, Signal bar, Stats bar,
+             Prices, Magazzino, Vendite, Charts
+═══════════════════════════════════════════════════════ */
+
+/* ── Layout ── */
+.root {
+  max-width: 960px;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+}
+
+.renameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.itemTitle {
+  margin: 0;
+  font-size: 17px;
+  color: var(--gold);
+  letter-spacing: 2px;
+}
+
+.iconBtn {
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 7px;
+  line-height: 1;
+}
+
+.metaRow {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.categorySelect {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  color: var(--muted);
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tabBar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── Section Label (reusable) ── */
+.sectionLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+}
+
+/* ── Signal + Target Bar ── */
+.signalRow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.signalCard {
+  border-radius: 10px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 220px;
+}
+
+.signalIcon {
+  font-size: 32px;
+}
+
+.signalTitle {
+  font-size: 12px;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.signalValue {
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.signalDiff {
+  font-size: 13px;
+  opacity: .8;
+  margin-top: 4px;
+  font-family: monospace;
+}
+
+.diffEvCard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 160px;
+  cursor: help;
+}
+
+.diffEvLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.diffEvValue {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+/* ── KPI cards (buy/sell/margin) ── */
+.kpiRow {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.kpiCard {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: center;
+}
+
+.kpiLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+}
+
+.kpiValue {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+/* ── Stats Bar ── */
+.statsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.statsPrimary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.statsSecondary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.primaryCard {
+  background: var(--panel);
+  border-radius: 9px;
+  padding: 10px 14px;
+}
+
+.primaryCardNormal {
+  composes: primaryCard;
+  border: 1px solid var(--border);
+  flex: 1 1 80px;
+}
+
+.primaryLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.primaryValueBig {
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 3px;
+  font-family: monospace;
+}
+
+.primaryValue {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 3px;
+  font-family: monospace;
+}
+
+.secondaryCard {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 11px;
+  flex: 1 1 70px;
+}
+
+.secondaryLabel {
+  font-size: 11px;
+  color: var(--muted2);
+  letter-spacing: 1.5px;
+}
+
+.secondaryValue {
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 2px;
+  font-family: monospace;
+}
+
+.secondarySub {
+  font-size: 11px;
+  color: var(--muted2);
+  margin-top: 1px;
+}
+
+/* ── Panel card (shared wrapper) ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+
+.panelChart {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+/* ── Form rows ── */
+.formRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.fieldNarrow {
+  flex: 0 0 100px;
+}
+
+.fieldMid {
+  flex: 0 0 130px;
+}
+
+.fieldWide {
+  flex: 0 0 160px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 5px;
+}
+
+.fieldHint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Esaurito banner ── */
+.esauritoBanner {
+  margin-top: 12px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.esauritoIcon {
+  font-size: 20px;
+}
+
+.esauritoTitle {
+  font-size: 13px;
+  color: var(--purple);
+  font-weight: 700;
+}
+
+.esauritoSub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.esauritoCount {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ══════════════ PRICES TAB ══════════════ */
+
+.priceList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.emptyMsg {
+  color: var(--muted);
+  text-align: center;
+  padding: 36px;
+  font-size: 12px;
+}
+
+/* price row (normal) */
+.priceRow {
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  gap: 10px;
+}
+
+/* price row (esaurito) */
+.priceRowEsaurito {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 7px 12px;
+  gap: 10px;
+}
+
+.timestamp {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 118px;
+  flex-shrink: 0;
+}
+
+.priceGold {
+  font-size: 16px;
+  color: var(--gold);
+  font-weight: 700;
+  font-family: monospace;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.priceOri {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 80px;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.priceDelta {
+  font-size: 12px;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.eventTag {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.esauritoLabel {
+  font-size: 13px;
+  color: var(--purple);
+  font-weight: 700;
+}
+
+.eventTagSmall {
+  font-size: 11px;
+}
+
+.noteEllipsis {
+  font-size: 12px;
+  color: var(--muted2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delBtn {
+  background: none;
+  border: none;
+  color: var(--muted2);
+  cursor: pointer;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.delBtn14 {
+  composes: delBtn;
+  font-size: 14px;
+}
+
+/* ══════════════ MAGAZZINO TAB ══════════════ */
+
+.kpiBar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.kpiStatCard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 13px;
+  flex: 1 1 90px;
+}
+
+.kpiStatLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.kpiStatValue {
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 3px;
+  font-family: monospace;
+}
+
+.kpiStatSub {
+  font-size: 11px;
+  color: var(--muted2);
+  margin-top: 2px;
+}
+
+.lotList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 14px;
+}
+
+.lotRow {
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 12px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lotQty {
+  font-size: 14px;
+  color: var(--blue);
+  font-weight: 700;
+  font-family: monospace;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.lotPrice {
+  font-size: 14px;
+  color: var(--text);
+  font-family: monospace;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.lotTotal {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 90px;
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.lotProfit {
+  font-size: 13px;
+  font-family: monospace;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.lotEvent {
+  font-size: 12px;
+}
+
+.lotNote {
+  font-size: 12px;
+  color: var(--muted2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptySmall {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 14px 0;
+}
+
+/* field for "totale lotto" preview */
+.lotTotalPreview {
+  flex: 0 0 140px;
+}
+
+.lotTotalValue {
+  font-size: 15px;
+  color: var(--blue);
+  font-weight: 700;
+  font-family: monospace;
+  padding: 8px 0;
+}
+
+/* ══════════════ VENDITE TAB ══════════════ */
+
+.listingRow {
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.listingDateCol {
+  display: flex;
+  flex-direction: column;
+  min-width: 118px;
+  flex-shrink: 0;
+}
+
+.listingDateTop {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.listingDays {
+  font-size: 11px;
+}
+
+.listingQty {
+  font-size: 14px;
+  color: var(--blue);
+  font-weight: 700;
+  font-family: monospace;
+  min-width: 45px;
+  flex-shrink: 0;
+}
+
+.listingPrice {
+  font-size: 16px;
+  color: var(--gold);
+  font-weight: 700;
+  font-family: monospace;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.listingTotal {
+  font-size: 13px;
+  color: var(--muted);
+  font-family: monospace;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.listingProfit {
+  font-size: 13px;
+  font-family: monospace;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.listingMeta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.listingLots {
+  font-size: 11px;
+  color: var(--muted2);
+  flex-shrink: 0;
+}
+
+.uncovered {
+  font-size: 11px;
+  color: var(--red);
+}
+
+.tax {
+  font-size: 11px;
+  color: var(--red);
+  flex-shrink: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.actionRow {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Partial sell area */
+.partialBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.partialLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.partialProfit {
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* listing list */
+.listingList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.emptyListing {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 14px 0;
+}
+
+/* sold history */
+.soldList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.soldRow {
+  display: flex;
+  align-items: center;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 14px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.soldTimestamp {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 118px;
+  flex-shrink: 0;
+}
+
+.soldQtyPrice {
+  font-size: 13px;
+  color: var(--muted);
+  font-family: monospace;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.soldStatusCol {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.soldLabel {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.soldTime {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.soldProfit {
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+/* Lot preview area */
+.lotPreview {
+  margin-top: 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.lotPreviewLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+
+.lotPreviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lotPreviewRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.lotPreviewQty {
+  color: var(--blue);
+  font-weight: 700;
+  font-family: monospace;
+  min-width: 50px;
+}
+
+.lotPreviewPrice {
+  color: var(--text);
+  font-family: monospace;
+}
+
+.lotPreviewTotal {
+  color: var(--muted);
+  font-family: monospace;
+}
+
+.lotPreviewSummary {
+  margin-top: 8px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.lotPreviewSumLabel {
+  color: var(--muted);
+}
+
+.lotPreviewProfit {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.lotPreviewNone {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ══════════════ CHARTS TAB ══════════════ */
+
+.chartDayRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.chartDayLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+}
+
+.chartNoData {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dayStatsRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.dayStatCard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 12px;
+  flex: 1 1 80px;
+}
+
+.dayStatLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.dayStatValue {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 3px;
+  font-family: monospace;
+}
+
+.chartTitle {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 12px;
+}
+
+.chartEmpty {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px;
+  font-size: 12px;
+}
+
+.multiDayTitle {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 6px;
+}
+
+.multiDaySub {
+  font-size: 12px;
+  color: var(--muted2);
+  margin-bottom: 12px;
+}
+
+.multiDayDiff {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Shared mono bold (for dynamically-colored values) ── */
+.mono {
+  font-family: monospace;
+  font-weight: 700;
+}
+
+/* ── Inline helpers ── */
+.flexShrink0 {
+  flex-shrink: 0;
+}

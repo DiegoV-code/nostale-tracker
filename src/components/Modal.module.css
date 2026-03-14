@@ -1,0 +1,18 @@
+/* Modal overlay + inner panel */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inner {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px var(--shadow);
+  overflow: hidden;
+}

@@ -1,0 +1,53 @@
+/* ═══════════════════════════════════════════════════════
+   CSS Custom Properties — Dark / Light palette
+   Mirrors DARK and LIGHT from src/utils/theme.ts
+═══════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="dark"] {
+  --bg:       #13151f;
+  --panel:    #1c1f2e;
+  --border:   #272b3d;
+  --border2:  #353a52;
+  --text:     #dde6f0;
+  --muted:    #8895b3;
+  --muted2:   #6b7a96;
+  --gold:     #e8a838;
+  --green:    #4ade80;
+  --red:      #fb7185;
+  --blue:     #60a5fa;
+  --purple:   #a78bfa;
+  --amber:    #f59e0b;
+  --cyan:     #06b6d4;
+  --orange:   #f97316;
+  --input-bg: #0f1119;
+  --pill-txt: #0f1119;
+  --flat:     #4b5563;
+  --hover-bg: rgba(255,255,255,.04);
+  --hover-si: rgba(232,168,56,.08);
+  --shadow:   rgba(0,0,0,.3);
+}
+
+[data-theme="light"] {
+  --bg:       #e4e7ed;
+  --panel:    #f5f6f8;
+  --border:   #6b7a8e;
+  --border2:  #8e99ad;
+  --text:     #111827;
+  --muted:    #3d4a5c;
+  --muted2:   #4b5568;
+  --gold:     #a06510;
+  --green:    #15803d;
+  --red:      #b91c1c;
+  --blue:     #1d4ed8;
+  --purple:   #7c3aed;
+  --amber:    #b45309;
+  --cyan:     #0e7490;
+  --orange:   #c2410c;
+  --input-bg: #dce1ea;
+  --pill-txt: #ffffff;
+  --flat:     #6b7280;
+  --hover-bg: rgba(0,0,0,.06);
+  --hover-si: rgba(160,101,16,.12);
+  --shadow:   rgba(0,0,0,.12);
+}

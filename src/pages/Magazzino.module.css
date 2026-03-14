@@ -1,0 +1,280 @@
+/* Magazzino — stock overview, analytics, staging time */
+
+/* ── Section labels ── */
+.sectionLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+}
+
+.sectionLabelAlt {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 12px;
+}
+
+/* ── Empty state ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 250px;
+  gap: 12px;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  opacity: .08;
+}
+
+.emptyText {
+  color: var(--muted);
+  letter-spacing: 3px;
+  font-size: 12px;
+}
+
+/* ── Table layout ── */
+.tableWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tableHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.tableScroll {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* ── Row ── */
+.row {
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  gap: 10px;
+  cursor: pointer;
+}
+
+/* ── Column widths ── */
+.colItem {
+  width: 150px;
+  flex-shrink: 0;
+}
+
+.colQty {
+  width: 55px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colPrice {
+  width: 95px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colCost {
+  width: 95px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colCurrent {
+  width: 85px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colProfit {
+  width: 95px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colAge {
+  width: 75px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colDate {
+  flex: 1;
+  text-align: right;
+}
+
+/* ── Cell text styles ── */
+.itemName {
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qty {
+  font-size: 14px;
+  color: var(--blue);
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.priceText {
+  font-size: 13px;
+  color: var(--text);
+  font-family: monospace;
+}
+
+.costText {
+  font-size: 13px;
+  color: var(--red);
+  font-family: monospace;
+}
+
+.currentText {
+  font-size: 13px;
+  font-family: monospace;
+  color: var(--muted);
+}
+
+.profitText {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.ageText {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dateText {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Footer ── */
+.footer {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted2);
+}
+
+/* ── Analytics panels ── */
+.analyticsSection {
+  margin-top: 24px;
+}
+
+.analyticsSectionAlt {
+  margin-top: 20px;
+}
+
+.chartPanel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* ── Staging time layout ── */
+.stagingFlex {
+  display: flex;
+  gap: 16px;
+}
+
+.stagingLeft {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stagingTableHeader {
+  display: flex;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.stagingColItem {
+  flex: 1;
+}
+
+.stagingColTime {
+  width: 120px;
+  text-align: right;
+}
+
+.stagingRow {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.stagingItemName {
+  flex: 1;
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stagingTime {
+  width: 120px;
+  text-align: right;
+  font-size: 13px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.stagingAvg {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: right;
+  padding-right: 10px;
+}
+
+.stagingAvgValue {
+  color: var(--gold);
+}
+
+.stagingChart {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  min-height: 300px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* ── Legend label (used inline via Recharts) ── */
+.legendLabel {
+  color: var(--muted);
+  font-size: 11px;
+}

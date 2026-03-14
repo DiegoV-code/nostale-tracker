@@ -1,0 +1,189 @@
+/* Analisi — comparative analysis table */
+
+/* ── Page header ── */
+.sectionLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+}
+
+.emptyState {
+  color: var(--muted);
+  text-align: center;
+  padding: 60px;
+  font-size: 14px;
+}
+
+/* ── KPI banner ── */
+.kpiWrap {
+  margin-bottom: 14px;
+}
+
+.kpiBanner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 12px 20px;
+}
+
+.kpiLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.kpiValue {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+/* ── Search + filter bar ── */
+.filterBar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filterGroup {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.filterBtn {
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.filterCount {
+  opacity: .6;
+  font-weight: 400;
+}
+
+/* ── Table wrapper ── */
+.tableWrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+/* ── Header row ── */
+.headerRow {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+.th {
+  font-size: 12px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  position: relative;
+}
+
+.thActive {
+  color: var(--gold);
+}
+
+.thInactive {
+  color: var(--muted);
+}
+
+.resizeHandle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+/* ── Data row ── */
+.dataRow {
+  display: flex;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  align-items: center;
+}
+
+.rowEven {
+  background: transparent;
+}
+
+.rowOdd {
+  background: var(--input-bg);
+}
+
+/* ── Cells ── */
+.cellName {
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellSignalWrap {
+  /* sized inline via width prop */
+}
+
+.signalPill {
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.cellPrice {
+  font-size: 14px;
+  color: var(--text);
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.cellMono {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.cellStability {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Virtual scroll body ── */
+.tableBody {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* ── Footer ── */
+.footer {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted2);
+}

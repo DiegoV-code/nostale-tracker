@@ -1,0 +1,295 @@
+/* NdCalc — ND calculator & item table */
+
+/* ── Section header label (e.g. "NOS DOLLARI") ── */
+.sectionLabel {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Top row: rate + calc + discount panels ── */
+.topRow {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+/* ── Generic panel card ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.panelRate {
+  composes: panel;
+  flex: 1 1 200px;
+}
+
+.panelCalc {
+  composes: panel;
+  flex: 1 1 250px;
+}
+
+.panelDiscount {
+  composes: panel;
+  flex: 0 0 200px;
+  transition: all .15s;
+}
+
+/* ── Panel sub-label (e.g. "TASSO ND") ── */
+.panelLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+
+/* ── Flex row used inside panels ── */
+.flexRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Unit label (e.g. "oro / ND", "ND =") ── */
+.unitLabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── Rate hint below input ── */
+.rateHint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Gold value display ── */
+.goldValue {
+  font-size: 18px;
+  color: var(--gold);
+  font-weight: 700;
+  font-family: monospace;
+}
+
+/* ── Discount button row ── */
+.discountRow {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+/* ── Discount button base ── */
+.discBtn {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ── Empty state ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  gap: 12px;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  opacity: .08;
+}
+
+.emptyText {
+  color: var(--muted);
+  letter-spacing: 3px;
+  font-size: 12px;
+}
+
+.emptyHint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ── Table header row ── */
+.tableHeader {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* ── Column widths ── */
+.colItem    { width: 160px; flex-shrink: 0; }
+.colNd      { width: 80px;  flex-shrink: 0; text-align: right; }
+.colQty     { width: 55px;  flex-shrink: 0; text-align: right; }
+.colWide    { width: 100px; flex-shrink: 0; text-align: right; }
+
+/* ── Table body wrapper ── */
+.tableBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Table row ── */
+.tableRow {
+  display: flex;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ── Item name (gold) ── */
+.itemName {
+  width: 160px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Monospace cell base ── */
+.cellMono {
+  font-family: monospace;
+  font-weight: 700;
+}
+
+/* ── ND cost cell ── */
+.cellNd {
+  composes: cellMono;
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 14px;
+  text-align: right;
+}
+
+/* ── Strikethrough original ND cost ── */
+.ndStrike {
+  font-size: 9px;
+  color: var(--muted);
+  display: block;
+  text-decoration: line-through;
+}
+
+/* ── Qty cell ── */
+.cellQty {
+  composes: cellMono;
+  width: 55px;
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--blue);
+  text-align: right;
+}
+
+/* ── Generic 100px data cell ── */
+.cellData {
+  width: 100px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-family: monospace;
+  text-align: right;
+}
+
+/* ── Profit cell ── */
+.cellProfit {
+  width: 100px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: monospace;
+  text-align: right;
+}
+
+/* ── Inline edit section ── */
+.editSection {
+  margin-top: 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.editLabel {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
+.editList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editName {
+  width: 150px;
+  font-size: 13px;
+  color: var(--gold);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.editField {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editFieldLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.editFieldLabelAmber {
+  font-size: 11px;
+  color: var(--amber);
+}
+
+/* ── Select dropdown base ── */
+.selectBase {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ── Discount result ── */
+.discountResult {
+  font-size: 11px;
+  color: var(--amber);
+  font-family: monospace;
+}
