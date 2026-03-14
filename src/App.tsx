@@ -32,6 +32,9 @@ declare module "react" {
   }
 }
 
+// Electron bug: confirm() ruba il focus dal webContents, gli input smettono di funzionare
+function confirm(msg: string): boolean { const r = confirm(msg); setTimeout(() => window.focus(), 0); return r }
+
 // getSignal wrapper: passa C (palette) come terzo argomento
 function getSignal(it: Item | null | undefined, cfg: SignalConfig | null | undefined): Signal { return _getSignal(it, cfg, C) }
 
@@ -548,18 +551,25 @@ export default function App() {
       const it = data.items[name]
       const lots = it.lots || []
       const ps = it.prices || []
-      // Ultimo prezzo reale (coerente con lotStats)
+      // Ultimo prezzo reale (per colonna ATTUALE)
       const realPrices = ps.filter(p => !p.esaurito)
       const currentPrice = realPrices.length ? realPrices[realPrices.length - 1].price : null
+      // Media vendita: media listPrice dei listing venduti (per profitto stimato)
+      const soldListings = (it.listings || []).filter(l => l.sold)
+      const avgSellPrice = soldListings.length
+        ? Math.round(soldListings.reduce((a, l) => a + l.listPrice, 0) / soldListings.length)
+        : null
+      // Riferimento profitto: media vendita se disponibile, altrimenti ultimo prezzo
+      const refPrice = avgSellPrice ?? currentPrice
       // One row per open lot
       for (const lot of lots) {
         if (lot.sold) continue
         const lotCost = lot.qty * lot.price
-        // Profitto stimato = qty * (ultimo prezzo - prezzo acquisto)
-        const estValue = currentPrice != null ? lot.qty * currentPrice : null
-        const estProfit = currentPrice != null ? lot.qty * (currentPrice - lot.price) : null
+        // Profitto stimato = qty * (media vendita - prezzo acquisto)
+        const estValue = refPrice != null ? lot.qty * refPrice : null
+        const estProfit = refPrice != null ? lot.qty * (refPrice - lot.price) : null
         const ageDays = (Date.now() - new Date(lot.timestamp).getTime()) / 86400000
-        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, estValue, estProfit, ageDays, currentPrice, note: lot.note })
+        rows.push({ name, lot, qty: lot.qty, price: lot.price, lotCost, estValue, estProfit, ageDays, currentPrice, refPrice, note: lot.note })
         itemSet.add(name)
       }
     }
@@ -807,7 +817,7 @@ export default function App() {
       const devPct = Math.abs(price - avg) / avg
       if (devPct > 0.40) {
         const dir = price > avg ? "sopra" : "sotto"
-        if (!window.confirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+        if (!confirm(`⚠️ Prezzo anomalo!\n\n${fmtG(Math.round(price))} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
     // Ri-leggi dataRef DOPO il confirm (il dialog blocca il thread, lo stato potrebbe essere cambiato)
@@ -831,7 +841,7 @@ export default function App() {
   }
 
   const delPrice = useCallback((idx: number) => {
-    if (!window.confirm("Eliminare questa registrazione di prezzo?")) return
+    if (!confirm("Eliminare questa registrazione di prezzo?")) return
     const d = dataRef.current!
     const si = selItemRef.current!
     const curPrices = d.items[si]?.prices || []
@@ -851,7 +861,7 @@ export default function App() {
       const devPct = Math.abs(roundedPrice - avg) / avg
       if (devPct > 0.40) {
         const dir = roundedPrice > avg ? "sopra" : "sotto"
-        if (!window.confirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
+        if (!confirm(`⚠️ Prezzo acquisto anomalo!\n\n${fmtG(roundedPrice)} è ${(devPct*100).toFixed(0)}% ${dir} la media storica (${fmtG(Math.round(avg))}).\n\nConfermi questo prezzo?`)) return
       }
     }
     // Se esiste un lotto aperto con lo stesso prezzo e c'è spazio, somma le quantità
@@ -878,7 +888,7 @@ export default function App() {
     const lot = curLots[idx]
     const linkedListings = curListings.filter((l: Listing) => !l.sold && l.lotLinks?.some(lk => lk.lotId === lot.id))
     if (linkedListings.length > 0) {
-      if (!window.confirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
+      if (!confirm(`Questo lotto è collegato a ${linkedListings.length} listing attiv${linkedListings.length===1?"o":"i"}. Eliminare comunque?`)) return
     }
     const cleanedListings = curListings.map((l: Listing) => {
       if (l.sold || !l.lotLinks) return l
@@ -894,7 +904,7 @@ export default function App() {
   }, [upd])
 
   const delItem = useCallback((name: string) => {
-    if (!window.confirm(`Eliminare "${name}" e tutti i suoi dati?`)) return
+    if (!confirm(`Eliminare "${name}" e tutti i suoi dati?`)) return
     const d = dataRef.current!
     const items = { ...d.items }
     delete items[name]

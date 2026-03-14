@@ -23,6 +23,7 @@ interface MagazzinoRow {
   estProfit: number | null
   ageDays: number
   currentPrice: number | null
+  refPrice: number | null
   note?: string
 }
 
@@ -113,7 +114,7 @@ export default memo(function Magazzino({ magazzinoOverview, performanceAnalytics
             <div className={s.colQty}>QTÀ</div>
             <div className={s.colPrice}>PREZZO ACQ.</div>
             <div className={s.colCost}>COSTO SLOT</div>
-            <div className={s.colCurrent}>ATTUALE</div>
+            <div className={s.colCurrent}>MEDIA VEND.</div>
             <div className={s.colProfit}>PROFITTO ST.</div>
             <div className={s.colAge}>ETÀ</div>
             <div className={s.colDate}>DATA</div>
@@ -132,7 +133,7 @@ export default memo(function Magazzino({ magazzinoOverview, performanceAnalytics
                   <div className={`${s.colQty} ${s.qty}`}>×{r.qty}</div>
                   <div className={`${s.colPrice} ${s.priceText}`}>{fmtG(r.price)}</div>
                   <div className={`${s.colCost} ${s.costText}`}>{fmtG(r.lotCost)}</div>
-                  <div className={`${s.colCurrent} ${s.currentText}`}>{r.currentPrice != null ? fmtG(r.currentPrice) : "—"}</div>
+                  <div className={`${s.colCurrent} ${s.currentText}`}>{r.refPrice != null ? fmtG(r.refPrice) : "—"}</div>
                   <div className={`${s.colProfit} ${s.profitText}`} style={{ color:r.estProfit!=null?(r.estProfit>=0?C.green:C.red):C.muted }}>
                     {r.estProfit != null ? `${r.estProfit>=0?"▲":"▼"} ${fmtG(Math.abs(r.estProfit))}` : "—"}
                   </div>

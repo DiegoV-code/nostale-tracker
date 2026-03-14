@@ -31,8 +31,8 @@ export const DARK: Palette = {
 }
 
 export const LIGHT: Palette = {
-  bg:      "#e4e7ed",
-  panel:   "#f5f6f8",
+  bg:      "#c8ccd6",
+  panel:   "#d5d9e1",
   border:  "#6b7a8e",
   border2: "#8e99ad",
   text:    "#111827",
@@ -46,7 +46,7 @@ export const LIGHT: Palette = {
   amber:   "#b45309",
   cyan:    "#0e7490",
   orange:  "#c2410c",
-  inputBg: "#dce1ea",
+  inputBg: "#bfc4d0",
   pillTxt: "#ffffff",
   flat:    "#6b7280",
   hoverBg: "rgba(0,0,0,.06)",

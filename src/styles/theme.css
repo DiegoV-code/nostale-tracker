@@ -29,8 +29,8 @@
 }
 
 [data-theme="light"] {
-  --bg:       #e4e7ed;
-  --panel:    #f5f6f8;
+  --bg:       #c8ccd6;
+  --panel:    #d5d9e1;
   --border:   #6b7a8e;
   --border2:  #8e99ad;
   --text:     #111827;
@@ -44,7 +44,7 @@
   --amber:    #b45309;
   --cyan:     #0e7490;
   --orange:   #c2410c;
-  --input-bg: #dce1ea;
+  --input-bg: #bfc4d0;
   --pill-txt: #ffffff;
   --flat:     #6b7280;
   --hover-bg: rgba(0,0,0,.06);
